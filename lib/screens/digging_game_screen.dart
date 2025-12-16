@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../models/memory.dart';
 import '../models/game.dart'; 
 import '../services/storage_service.dart';
+//kakuninn
 
 // セル状態の定義 (変更なし)
 enum CellState { frozen, cracking, melted, found }
