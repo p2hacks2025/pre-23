@@ -10,18 +10,18 @@ import '../services/auth_service.dart';
 import 'memory_post_screen.dart';
 import 'create_memory_screen.dart';
 import 'digging_game_screen.dart';
-import 'collection_screen.dart';
+// import 'collection_screen.dart'; // ★ 削除
 import 'achievements_screen.dart';
 import 'profile_screen.dart';
 import '../widgets/navigation_bar.dart';
 import 'sign_in_screen.dart';
 import '../models/user_profile.dart';
 
+// CurrentViewから collection を削除
 enum CurrentView {
   home,
   create,
   dig,
-  collection,
   achievements,
 }
 
@@ -35,7 +35,6 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final GlobalKey _createMemoryKey = GlobalKey();
   
-  // ★ PageView用のコントローラーを追加
   late PageController _pageController;
 
   CurrentView _currentView = CurrentView.home;
@@ -47,7 +46,8 @@ class _HomeScreenState extends State<HomeScreen> {
   // データ
   UserProfile _userProfile = UserProfile(id: '', username: '', avatar: '', bio: '');
   List<Memory> _memories = [];
-  List<Item> _items = [];
+  // アイテムデータは発掘ゲームのロジック維持のため残していますが、表示はしません
+ 
   List<Achievement> _achievements = [];
   List<Memory> _undiscoveredMemories = [];
   int _totalDigs = 0;
@@ -57,7 +57,6 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    // ★ コントローラーの初期化
     _pageController = PageController(initialPage: 0);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -67,19 +66,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
-    // ★ コントローラーの破棄（メモリリーク防止）
     _pageController.dispose();
     super.dispose();
   }
 
-  // ★ 画面（View）とページ番号（Index）を変換するヘルパー
-  // Create画面はPageViewに含まないため、除外してマッピングします
+  // ★ インデックスの対応を変更（コレクション削除により）
   int _viewToIndex(CurrentView view) {
     switch (view) {
       case CurrentView.home: return 0;
       case CurrentView.dig: return 1;
-      case CurrentView.collection: return 2;
-      case CurrentView.achievements: return 3;
+      case CurrentView.achievements: return 2; // 3 -> 2へ
       default: return 0;
     }
   }
@@ -88,22 +84,17 @@ class _HomeScreenState extends State<HomeScreen> {
     switch (index) {
       case 0: return CurrentView.home;
       case 1: return CurrentView.dig;
-      case 2: return CurrentView.collection;
-      case 3: return CurrentView.achievements;
+      case 2: return CurrentView.achievements; // 3 -> 2へ
       default: return CurrentView.home;
     }
   }
 
-  // ★ 画面切り替えの処理を統合
   void _navigateToView(CurrentView view) {
     setState(() {
       _currentView = view;
     });
 
-    // Create以外の画面なら、PageViewも該当ページへスクロールさせる
     if (view != CurrentView.create) {
-      // jumpToPageなら一瞬で切り替え、animateToPageならスワイプのように動く
-      // Instagram風ならタップ時は一瞬で切り替わることが多いのでjumpToPage推奨
       _pageController.jumpToPage(_viewToIndex(view));
     }
   }
@@ -117,7 +108,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final now = DateTime.now();
       final profile = await _authService.getCurrentUser();
       final userMemories = await _apiService.fetchUserMemories(profile.id);
-      final items = await _apiService.fetchUserItems(profile.id);
+      //final items = await _apiService.fetchUserItems(profile.id);
       final achievementData = await _apiService.fetchUserAchievementsAndDigs(profile.id);
       final achievements = achievementData['achievements'] as List<Achievement>;
       final totalDigs = achievementData['totalDigs'] as int;
@@ -134,7 +125,7 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {
         _userProfile = profile;
         _memories = userMemories;
-        _items = items;
+
         _achievements = achievements;
         _totalDigs = totalDigs;
         _undiscoveredMemories = undiscoveredMemories;
@@ -223,7 +214,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ★ _buildBodyをPageViewを使う形に大幅変更
   Widget _buildBody() {
     if (_isLoading) {
       return const Center(
@@ -238,14 +228,12 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    // 投稿モード（Create）のときは、スワイプできない画面を表示する
     if (_currentView == CurrentView.create) {
       return CreateMemoryScreen(
         key: _createMemoryKey,
         initialAuthor: _createFromHome ? _userProfile.username : null,
         onSubmit: _handleCreateMemory,
         onCancel: () {
-          // キャンセル時はホームに戻る
           _navigateToView(CurrentView.home);
           setState(() {
             _createFromHome = false;
@@ -254,16 +242,14 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    // それ以外のときは、スワイプ可能なPageViewを表示する
     return PageView(
       controller: _pageController,
-      // スワイプした時に下のナビゲーションバーも連動させる
       onPageChanged: (index) {
         setState(() {
           _currentView = _indexToView(index);
         });
       },
-      // 画面リスト (順番は _viewToIndex と合わせる: Home -> Dig -> Collection -> Achievements)
+      // ★ CollectionScreenを削除し、3画面構成に変更
       children: [
         // 0: Home
         MemoryPostScreen(
@@ -289,15 +275,12 @@ class _HomeScreenState extends State<HomeScreen> {
         DiggingGameScreen(
           undiscoveredMemories: _undiscoveredMemories,
           onDiscover: _handleDiscoverMemory,
-          onDiscoverItem: _handleDiscoverItem,
+          onDiscoverItem: _handleDiscoverItem, // ロジック上は残しておく
           dailyDigs: _dailyDigs,
           onDailyDigsChanged: _setDailyDigs,
         ),
         
-        // 2: Collection
-        CollectionScreen(items: _items),
-        
-        // 3: Achievements
+        // 2: Achievements (ここが3番目に)
         AchievementsScreen(
           achievements: _achievements,
           totalDigs: _totalDigs, 
@@ -320,7 +303,7 @@ class _HomeScreenState extends State<HomeScreen> {
           IconButton(
             icon: CircleAvatar(
               radius: 16,
-              backgroundColor: Colors.cyan.withAlpha((0.2 * 255).round()), 
+              backgroundColor: Colors.cyan.withValues(alpha: 0.2), 
               child: Text(_userProfile.username.isNotEmpty ? _userProfile.username[0] : 'G',
                   style: const TextStyle(color: Colors.cyan)),
             ),
@@ -352,7 +335,6 @@ class _HomeScreenState extends State<HomeScreen> {
               // 下のナビゲーションバー
               AppNavigationBar(
                 currentView: _currentView,
-                // ボタンを押した時の処理を _navigateToView に変更
                 onViewChanged: _navigateToView,
               ),
               const SizedBox(height: 8),
@@ -361,17 +343,19 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
       floatingActionButton: showFab
-          ? FloatingActionButton(
-              onPressed: () {
-                // FABを押した時は Createモードへ（スワイプ不可画面へ）
-                _navigateToView(CurrentView.create);
-                setState(() {
-                  _createFromHome = true;
-                });
-              },
-              backgroundColor: Colors.cyan,
-              foregroundColor: Colors.black,
-              child: const Icon(Icons.edit),
+          ? Padding(
+              padding: const EdgeInsets.only(bottom: 80.0),
+              child: FloatingActionButton(
+                onPressed: () {
+                  _navigateToView(CurrentView.create);
+                  setState(() {
+                    _createFromHome = true;
+                  });
+                },
+                backgroundColor: Colors.cyan,
+                foregroundColor: Colors.black,
+                child: const Icon(Icons.edit),
+              ),
             )
           : null,
     );
