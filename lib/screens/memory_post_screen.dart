@@ -11,6 +11,7 @@ class MemoryPostScreen extends StatefulWidget {
   final Function(String memoryId, String text, String author) onAddComment;
   final Function(Memory) onEditMemory;
   final Function(String) onDeleteMemory;
+  final Function(Memory) onTapMemory; // ★これを追加
 
   const MemoryPostScreen({
     super.key,
@@ -18,6 +19,7 @@ class MemoryPostScreen extends StatefulWidget {
     required this.onAddComment,
     required this.onEditMemory,
     required this.onDeleteMemory,
+    required this.onTapMemory, // ★これを追加
   });
 
   @override
@@ -86,7 +88,10 @@ class _MemoryPostScreenState extends State<MemoryPostScreen> {
       itemCount: widget.memories.length,
       itemBuilder: (context, index) {
         final memory = widget.memories[index];
-        return _buildMemoryCard(memory);
+        return GestureDetector(
+        onTap: () => widget.onTapMemory(memory), // ★タップされたら渡された関数を実行
+        child: _buildMemoryCard(memory),   // カードを表示するウィジェット
+      );
       },
     );
   }

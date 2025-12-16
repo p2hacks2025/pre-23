@@ -216,4 +216,18 @@ class ApiService {
     }
     return null;
   }
+
+  // lib/services/api_service.dart 内に追加
+
+Future<void> deleteMemory(String memoryId) async {
+  try {
+    // Firebase Firestoreから削除する場合
+    await _db.collection('memories').doc(memoryId).delete();
+    print('Memory $memoryId deleted successfully');
+  } catch (e) {
+    print('Error deleting memory: $e');
+    // 通信エラーなどで削除できない場合も、
+    // 必要に応じてリバース処理やエラー通知を検討してください。
+  }
+}
 }
