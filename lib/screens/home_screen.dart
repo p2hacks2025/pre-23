@@ -5,8 +5,8 @@ import 'package:flutter/foundation.dart';
 import '../models/memory.dart';
 import '../models/comment.dart';
 import '../models/game.dart';
-import '../services/api_service.dart'; // データ操作
-import '../services/auth_service.dart'; // 認証操作
+import '../services/api_service.dart';
+import '../services/auth_service.dart';
 import 'memory_post_screen.dart';
 import 'create_memory_screen.dart';
 import 'digging_game_screen.dart';
@@ -34,36 +34,80 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final GlobalKey _createMemoryKey = GlobalKey();
+  
+  // ★ PageView用のコントローラーを追加
+  late PageController _pageController;
+
   CurrentView _currentView = CurrentView.home;
   bool _createFromHome = false;
   
-  // サービスインスタンス
   final ApiService _apiService = ApiService();
   final AuthService _authService = AuthService();
 
   // データ
   UserProfile _userProfile = UserProfile(id: '', username: '', avatar: '', bio: '');
-  List<Memory> _memories = []; // 自分の投稿
-  List<Item> _items = []; // 発掘したアイテム
-  List<Achievement> _achievements = []; // 実績
-  List<Memory> _undiscoveredMemories = []; // 発掘ゲーム用リスト
-  int _totalDigs = 0; // 累積発掘回数
-  int _dailyDigs = 3; // デイリー発掘残り回数 (仮の初期値)
+  List<Memory> _memories = [];
+  List<Item> _items = [];
+  List<Achievement> _achievements = [];
+  List<Memory> _undiscoveredMemories = [];
+  int _totalDigs = 0;
+  int _dailyDigs = 3;
   bool _isLoading = true;
-
 
   @override
   void initState() {
     super.initState();
+    // ★ コントローラーの初期化
+    _pageController = PageController(initialPage: 0);
 
-    // 1フレーム描画後に Firebase を使う
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadData();
     });
   }
 
+  @override
+  void dispose() {
+    // ★ コントローラーの破棄（メモリリーク防止）
+    _pageController.dispose();
+    super.dispose();
+  }
 
-  // 日付が同じかどうかをチェックするヘルパー関数
+  // ★ 画面（View）とページ番号（Index）を変換するヘルパー
+  // Create画面はPageViewに含まないため、除外してマッピングします
+  int _viewToIndex(CurrentView view) {
+    switch (view) {
+      case CurrentView.home: return 0;
+      case CurrentView.dig: return 1;
+      case CurrentView.collection: return 2;
+      case CurrentView.achievements: return 3;
+      default: return 0;
+    }
+  }
+
+  CurrentView _indexToView(int index) {
+    switch (index) {
+      case 0: return CurrentView.home;
+      case 1: return CurrentView.dig;
+      case 2: return CurrentView.collection;
+      case 3: return CurrentView.achievements;
+      default: return CurrentView.home;
+    }
+  }
+
+  // ★ 画面切り替えの処理を統合
+  void _navigateToView(CurrentView view) {
+    setState(() {
+      _currentView = view;
+    });
+
+    // Create以外の画面なら、PageViewも該当ページへスクロールさせる
+    if (view != CurrentView.create) {
+      // jumpToPageなら一瞬で切り替え、animateToPageならスワイプのように動く
+      // Instagram風ならタップ時は一瞬で切り替わることが多いのでjumpToPage推奨
+      _pageController.jumpToPage(_viewToIndex(view));
+    }
+  }
+
   bool isSameDay(DateTime a, DateTime b) {
     return a.year == b.year && a.month == b.month && a.day == b.day;
   }
@@ -71,30 +115,14 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _loadData() async {
     try {
       final now = DateTime.now();
-
-      // 1. 認証ユーザー取得
       final profile = await _authService.getCurrentUser();
-
-      // 2. データ取得
-      final userMemories =
-          await _apiService.fetchUserMemories(profile.id);
-
-      final items =
-          await _apiService.fetchUserItems(profile.id);
-
-      final achievementData =
-          await _apiService.fetchUserAchievementsAndDigs(profile.id);
-
-      final achievements =
-          achievementData['achievements'] as List<Achievement>;
-      final totalDigs =
-          achievementData['totalDigs'] as int;
-
-      final undiscoveredMemories =
-          await _apiService.fetchUndiscoveredMemories(profile.id);
-
-      final lastDigDate =
-          await _apiService.fetchLastDigDate(profile.id);
+      final userMemories = await _apiService.fetchUserMemories(profile.id);
+      final items = await _apiService.fetchUserItems(profile.id);
+      final achievementData = await _apiService.fetchUserAchievementsAndDigs(profile.id);
+      final achievements = achievementData['achievements'] as List<Achievement>;
+      final totalDigs = achievementData['totalDigs'] as int;
+      final undiscoveredMemories = await _apiService.fetchUndiscoveredMemories(profile.id);
+      final lastDigDate = await _apiService.fetchLastDigDate(profile.id);
 
       int dailyDigs = _dailyDigs;
       if (lastDigDate == null || !isSameDay(lastDigDate, now)) {
@@ -114,10 +142,8 @@ class _HomeScreenState extends State<HomeScreen> {
         _isLoading = false;
       });
     } catch (e, s) {
-      // ★ ここ超重要（exe で原因が見える）
       debugPrint('❌ _loadData error: $e');
       debugPrintStack(stackTrace: s);
-
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -126,15 +152,12 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // 記憶投稿のハンドラ
   Future<void> _handleCreateMemory(
       String localPhotoPath, String text, String author) async {
     final user = await _authService.getCurrentUser();
     
     if (user.id == 'guest') {
-      if (kDebugMode) {
-        print('ゲストユーザーは投稿できません。');
-      }
+      if (kDebugMode) print('ゲストユーザーは投稿できません。');
       return; 
     }
     
@@ -147,33 +170,29 @@ class _HomeScreenState extends State<HomeScreen> {
 
     await _loadData();
 
+    // 投稿後はホームに戻る
+    _navigateToView(CurrentView.home);
     setState(() {
-      _currentView = CurrentView.home;
       _createFromHome = false;
     });
   }
 
-  // 記憶発掘のハンドラ
   Future<void> _handleDiscoverMemory(Memory memory) async {
     final user = await _authService.getCurrentUser();
     if (user.id == 'guest') return;
 
     await _apiService.discoverMemory(memory, user.id); 
-    
     await _loadData();
   }
 
-  // アイテム発掘のハンドラ
   Future<void> _handleDiscoverItem(Item item) async {
     final user = await _authService.getCurrentUser();
     if (user.id == 'guest') return;
 
     await _apiService.discoverItem(item, user.id);
-
     await _loadData();
   }
 
-  // デイリー発掘回数の設定
   void _setDailyDigs(int newCount) {
     if (mounted) {
       setState(() {
@@ -182,13 +201,11 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // プロフィール編集の保存ハンドラ
   Future<void> _handleSaveProfile(UserProfile updatedProfile) async {
     await _authService.signInWithUsername(updatedProfile.username); 
     await _loadData();
   }
 
-  // 認証フロー
   void _handleRequestSignIn() {
     showDialog(
       context: context,
@@ -206,7 +223,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-
+  // ★ _buildBodyをPageViewを使う形に大幅変更
   Widget _buildBody() {
     if (_isLoading) {
       return const Center(
@@ -221,9 +238,35 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    switch (_currentView) {
-      case CurrentView.home:
-        return MemoryPostScreen(
+    // 投稿モード（Create）のときは、スワイプできない画面を表示する
+    if (_currentView == CurrentView.create) {
+      return CreateMemoryScreen(
+        key: _createMemoryKey,
+        initialAuthor: _createFromHome ? _userProfile.username : null,
+        onSubmit: _handleCreateMemory,
+        onCancel: () {
+          // キャンセル時はホームに戻る
+          _navigateToView(CurrentView.home);
+          setState(() {
+            _createFromHome = false;
+          });
+        },
+      );
+    }
+
+    // それ以外のときは、スワイプ可能なPageViewを表示する
+    return PageView(
+      controller: _pageController,
+      // スワイプした時に下のナビゲーションバーも連動させる
+      onPageChanged: (index) {
+        setState(() {
+          _currentView = _indexToView(index);
+        });
+      },
+      // 画面リスト (順番は _viewToIndex と合わせる: Home -> Dig -> Collection -> Achievements)
+      children: [
+        // 0: Home
+        MemoryPostScreen(
           memories: _memories,
           onAddComment: (memoryId, text, author) async {
             final user = await _authService.getCurrentUser();
@@ -238,45 +281,33 @@ class _HomeScreenState extends State<HomeScreen> {
             await _apiService.addComment(memoryId, newComment);
             await _loadData();
           },
-          onEditMemory: (memory) async {
-            // ... (実装が必要)
-          },
-          onDeleteMemory: (id) async {
-            // ... (実装が必要)
-          },
-        );
-      case CurrentView.create:
-        return CreateMemoryScreen(
-          key: _createMemoryKey,
-          initialAuthor: _createFromHome ? _userProfile.username : null,
-          onSubmit: _handleCreateMemory,
-          onCancel: () => setState(() {
-            _currentView = CurrentView.home;
-            _createFromHome = false;
-          }),
-        );
-      case CurrentView.dig:
-        return DiggingGameScreen(
+          onEditMemory: (memory) async {},
+          onDeleteMemory: (id) async {},
+        ),
+        
+        // 1: Dig (Game)
+        DiggingGameScreen(
           undiscoveredMemories: _undiscoveredMemories,
           onDiscover: _handleDiscoverMemory,
           onDiscoverItem: _handleDiscoverItem,
           dailyDigs: _dailyDigs,
           onDailyDigsChanged: _setDailyDigs,
-        );
-      case CurrentView.collection:
-        return CollectionScreen(items: _items); 
-      case CurrentView.achievements:
-        return AchievementsScreen(
+        ),
+        
+        // 2: Collection
+        CollectionScreen(items: _items),
+        
+        // 3: Achievements
+        AchievementsScreen(
           achievements: _achievements,
           totalDigs: _totalDigs, 
-        );
-    }
+        ),
+      ],
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    // FABを表示するかどうかの判定
-    // ホーム画面 かつ ゲストでない場合に表示
     final bool showFab = _currentView == CurrentView.home && _userProfile.id != 'guest';
 
     return Scaffold(
@@ -289,7 +320,6 @@ class _HomeScreenState extends State<HomeScreen> {
           IconButton(
             icon: CircleAvatar(
               radius: 16,
-              // withValues()の推奨警告への対応としてwithAlphaを使用
               backgroundColor: Colors.cyan.withAlpha((0.2 * 255).round()), 
               child: Text(_userProfile.username.isNotEmpty ? _userProfile.username[0] : 'G',
                   style: const TextStyle(color: Colors.cyan)),
@@ -297,8 +327,8 @@ class _HomeScreenState extends State<HomeScreen> {
             onPressed: () {
               showModalBottomSheet(
                 context: context,
-                isScrollControlled: true, // ★ これを追加！（重要）
-                backgroundColor: Colors.transparent, // 背景を透過させる（角丸のため）
+                isScrollControlled: true,
+                backgroundColor: Colors.transparent,
                 builder: (context) {
                   return ProfileScreen(
                     profile: _userProfile,
@@ -319,30 +349,29 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             children: [
               Expanded(child: _buildBody()),
-              // AppNavigationBarでは、'create'ボタンを非表示にする等の修正が必要かもしれません
+              // 下のナビゲーションバー
               AppNavigationBar(
                 currentView: _currentView,
-                onViewChanged: (view) => setState(() => _currentView = view),
-                // hideCreateButton の行を削除
+                // ボタンを押した時の処理を _navigateToView に変更
+                onViewChanged: _navigateToView,
               ),
               const SizedBox(height: 8),
             ],
           ),
         ),
       ),
-      // ★ ここに追加しました
       floatingActionButton: showFab
           ? FloatingActionButton(
               onPressed: () {
+                // FABを押した時は Createモードへ（スワイプ不可画面へ）
+                _navigateToView(CurrentView.create);
                 setState(() {
-                  // FABを押すと投稿画面（CreateMemoryScreen）へ遷移
-                  _currentView = CurrentView.create;
                   _createFromHome = true;
                 });
               },
-              backgroundColor: Colors.cyan, // 世界観に合わせた色
-              foregroundColor: Colors.black, // アイコンの色
-              child: const Icon(Icons.edit), // 投稿・編集アイコン
+              backgroundColor: Colors.cyan,
+              foregroundColor: Colors.black,
+              child: const Icon(Icons.edit),
             )
           : null,
     );

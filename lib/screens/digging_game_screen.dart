@@ -194,49 +194,7 @@ class _DiggingGameScreenState extends State<DiggingGameScreen>
         }
       }
 
-      // 2. アイテム関連 (legendaryCount, gemCount, bottleCount) の更新
-      /*if (item != null) {
-        final allItems = await _storageService.getItems();
-        
-        // Legendary Count
-        final legendaryCount = allItems.where((i) => i.rarity == Rarity.legendary).length;
-        for (var a in achievements.where((a) => a.type == AchievementType.legendaryCount)) {
-          if (!a.completed) {
-            final newProgress = min(legendaryCount, a.requirement);
-            if (newProgress > a.progress) {
-              achievements[achievements.indexOf(a)] = a.copyWith(
-                progress: newProgress,
-                completed: newProgress == a.requirement
-              );
-              changed = true;
-            }
-          }
-        }
-        
-        // Item Type Counts (gemCount, bottleCount)
-        final itemTypeCounts = <AchievementType, int>{};
-        // ✅ 修正: 累積アイテム数を使って実績進捗を更新
-        final allGems = allItems.where((i) => i.type == ItemType.gem).length;
-        final allBottles = allItems.where((i) => i.type == ItemType.bottle).length;
-        // 👇 ここに、カウントをマップに設定する処理を追加します
-        itemTypeCounts[AchievementType.gemCount] = allGems;
-        itemTypeCounts[AchievementType.bottleCount] = allBottles;
-        
-
-        for (var a in achievements.where((a) => a.type == AchievementType.gemCount || a.type == AchievementType.bottleCount)) {
-          if (!a.completed) {
-            final currentCount = itemTypeCounts[a.type] ?? 0;
-            final newProgress = min(currentCount, a.requirement);
-            if (newProgress > a.progress) {
-              achievements[achievements.indexOf(a)] = a.copyWith(
-                progress: newProgress,
-                completed: newProgress == a.requirement
-              );
-              changed = true;
-            }
-          }
-        }
-      }*/
+      // 2. アイテム関連 (削除済み)
 
       if (changed) {
         await _storageService.saveAchievements(achievements);
@@ -246,56 +204,11 @@ class _DiggingGameScreenState extends State<DiggingGameScreen>
     }
   }
 
-  int _getBonusDigsForRarity(Rarity rarity) {
-    switch (rarity) {
-      case Rarity.common:
-        return 0;
-      case Rarity.rare:
-        return 1;
-      case Rarity.epic:
-        return 2;
-      case Rarity.legendary:
-        return 3;
-    }
-  }
+  // ★ 削除: _getBonusDigsForRarity (未使用警告対応)
 
- /* Item _makeItem() {
-    final rnd = Random();
-    final roll = rnd.nextDouble();
-    final rarity = roll > 0.95
-        ? Rarity.legendary
-        : roll > 0.8
-            ? Rarity.epic
-            : roll > 0.5
-                ? Rarity.rare
-                : Rarity.common;
+  /* Item _makeItem() { ... } */
 
-    final types = ItemType.values;
-    final type = types[rnd.nextInt(types.length)];
-
-    return Item(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      type: type,
-      name: '古びた遺物 (${_getRarityLabel(rarity)})',
-      description: '歴史の断片',
-      rarity: rarity,
-      image: 'https://picsum.photos/80',
-      discoveredAt: DateTime.now(),
-    );
-  }*/
-
-  String _getRarityLabel(Rarity rarity) {
-    switch (rarity) {
-      case Rarity.common:
-        return 'コモン';
-      case Rarity.rare:
-        return 'レア';
-      case Rarity.epic:
-        return 'エピック';
-      case Rarity.legendary:
-        return 'レジェンダリー';
-    }
-  }
+  // ★ 削除: _getRarityLabel (item生成ロジック削除に伴い未使用)
 
   Future<void> _showDailyDigsEndDialog() async {
     if (!mounted) return;
@@ -361,7 +274,8 @@ class _DiggingGameScreenState extends State<DiggingGameScreen>
         border: Border.all(color: Colors.cyan.shade300, width: 3),
         boxShadow: [
           BoxShadow(
-            color: Colors.cyan.withOpacity(0.3),
+            // ★ withValues に修正
+            color: Colors.cyan.withValues(alpha: 0.3),
             blurRadius: 10,
             spreadRadius: 2,
           ),
@@ -413,7 +327,8 @@ class _DiggingGameScreenState extends State<DiggingGameScreen>
       case CellState.frozen:
         // 深く凍った氷のブロック
         bg = Color.lerp(const Color(0xFF6785A3), const Color(0xFF90a4ae), av)!; // わずかにアニメーション
-        borderColor = Colors.white.withOpacity(0.6);
+        // ★ withValues に修正
+        borderColor = Colors.white.withValues(alpha: 0.6);
         ico = const Icon(Icons.layers_clear, color: Colors.white70, size: 24);
         elevation = 5.0;
         break;
@@ -457,14 +372,16 @@ class _DiggingGameScreenState extends State<DiggingGameScreen>
           border: Border.all(color: borderColor, width: 2),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.4),
+              // ★ withValues に修正
+              color: Colors.black.withValues(alpha: 0.4),
               blurRadius: elevation * 2,
               offset: Offset(0, elevation),
             ),
             // 凍土の光沢
             if (st == CellState.frozen)
               BoxShadow(
-                color: Colors.cyanAccent.withOpacity(0.2),
+                // ★ withValues に修正
+                color: Colors.cyanAccent.withValues(alpha: 0.2),
                 blurRadius: 4,
                 spreadRadius: 1,
               ),
@@ -478,16 +395,14 @@ class _DiggingGameScreenState extends State<DiggingGameScreen>
   // --------------------------------------------------------------------------
   // 🚀 UI修正 3: 発見ポップアップの豪華化
   // --------------------------------------------------------------------------
- Widget _buildDiscoveryPopup(double w) {
-    // final discoveredItem = _discovered is Item ? _discovered as Item : null; // 👈 削除
+  Widget _buildDiscoveryPopup(double w) {
+    // final discoveredItem = _discovered is Item ? _discovered as Item : null; 
     final discoveredMemory = _discovered is Memory ? _discovered as Memory : null;
-    // final isItem = discoveredItem != null; // 👈 削除。常に false になる
+    
+    // ★ 削除: isItem (未使用警告対応)
     
     // discoveredMemory が null の場合は表示しない（_dig ロジックで制御されているはず）
     if (discoveredMemory == null) return const SizedBox.shrink(); 
-
-    // isItem のフラグを削除し、記憶発見用UIに固定
-    const isItem = false; 
 
     return Container(
       color: Colors.black54,
@@ -511,7 +426,8 @@ class _DiggingGameScreenState extends State<DiggingGameScreen>
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.cyan.withOpacity(0.4),
+                  // ★ withValues に修正
+                  color: Colors.cyan.withValues(alpha: 0.4),
                   blurRadius: 20,
                 ),
               ],
@@ -537,9 +453,6 @@ class _DiggingGameScreenState extends State<DiggingGameScreen>
                   textAlign: TextAlign.center,
                 ),
                 
-                // アイテムボーナス表示部分を削除
-                // if (isItem && _getBonusDigsForRarity(discoveredItem.rarity) > 0) ...[] // 👈 削除
-                
                 const SizedBox(height: 24),
                 SizedBox(
                   width: double.infinity,
@@ -562,7 +475,7 @@ class _DiggingGameScreenState extends State<DiggingGameScreen>
 
   @override
   Widget build(BuildContext context) {
-    final total = widget.dailyDigs + _bonusDigs;
+    // final total = widget.dailyDigs + _bonusDigs; // 警告: total未使用なら削除推奨だが今回は残置
     
     return Container(
       // 🚀 UI修正 4: 画面全体の背景をファンタジー風グラデーションに
@@ -617,66 +530,65 @@ class _DiggingGameScreenState extends State<DiggingGameScreen>
                               ],
                             ),
                           ],
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                // Grid が画面に収まるようにサイズを制御
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  // Grid が画面に収まるようにサイズを制御
                     Expanded(
-                  child: Center(
-                    child: AspectRatio( // Grid全体を正方形に保つ
-                      aspectRatio: 1.0,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.blueGrey.shade800.withOpacity(0.5),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: Colors.cyan.withOpacity(0.3)),
-                        ),
-                        padding: const EdgeInsets.all(8),
-                        // width/heightの固定指定は削除
-
-                        child: GridView.builder(
-                          physics: const NeverScrollableScrollPhysics(),
-                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount( // const を追加
-                            crossAxisCount: gridCols,
-                            childAspectRatio: 1.0,
-                            mainAxisSpacing: 8,
-                            crossAxisSpacing: 8,
+                    child: Center(
+                      child: AspectRatio( // Grid全体を正方形に保つ
+                        aspectRatio: 1.0,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            // ★ withValues に修正
+                            color: Colors.blueGrey.shade800.withValues(alpha: 0.5),
+                            borderRadius: BorderRadius.circular(16),
+                            // ★ withValues に修正
+                            border: Border.all(color: Colors.cyan.withValues(alpha: 0.3)),
                           ),
-                          itemCount: gridSize,
-                          itemBuilder: (_, i) => _cell(i), // ✅ 修正: cszを渡さない
+                          padding: const EdgeInsets.all(8),
+                          // width/heightの固定指定は削除
+
+                          child: GridView.builder(
+                            physics: const NeverScrollableScrollPhysics(),
+                            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount( // const を追加
+                              crossAxisCount: gridCols,
+                              childAspectRatio: 1.0,
+                              mainAxisSpacing: 8,
+                              crossAxisSpacing: 8,
+                            ),
+                            itemCount: gridSize,
+                            itemBuilder: (_, i) => _cell(i), // ✅ 修正: cszを渡さない
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 16),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: _isDigging || _discovered == null ? null : _reset, 
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.cyan.shade600,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _isDigging || _discovered == null ? null : _reset, 
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.cyan.shade600,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: const Text('リセットして次を掘る', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
                     ),
-                    child: const Text('リセットして次を掘る', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          
-          // 🚀 UI修正 6: 発掘回数表示をヘッダーの下に移動
-          // 元のPositionedのウィジェットは削除しました。発掘情報ヘッダーに統合しています。
-
-          // 🚀 UI修正 7: ポップアップをカスタムウィジェットに置き換え
-          if (_discovered != null)
-            Positioned.fill(
-              child: _buildDiscoveryPopup(w),
-            ),
-        ],
+            
+            // 🚀 UI修正 7: ポップアップをカスタムウィジェットに置き換え
+            if (_discovered != null)
+              Positioned.fill(
+                child: _buildDiscoveryPopup(w),
+              ),
+          ],
         );
       })
     );
