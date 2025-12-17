@@ -9,6 +9,7 @@ class Memory {
   final DateTime createdAt;
   final bool discovered;
   final List<Comment> comments;
+  final int starRating; // 星の数（1〜5）
 
   Memory({
     required this.id,
@@ -19,7 +20,12 @@ class Memory {
     required this.createdAt,
     required this.discovered,
     required this.comments,
+    this.starRating = 3, // デフォルト値
   });
+
+  // ★ この行がエラーを解決します！
+  // 星1なら10回、星5なら50回のタップが必要になる計算です
+  int get requiredClicks => starRating * 10;
 
   Map<String, dynamic> toJson() {
     return {
@@ -31,6 +37,7 @@ class Memory {
       'createdAt': createdAt.toIso8601String(),
       'discovered': discovered,
       'comments': comments.map((c) => c.toJson()).toList(),
+      'starRating': starRating,
     };
   }
 
@@ -45,31 +52,8 @@ class Memory {
       discovered: json['discovered'] ?? false,
       comments: (json['comments'] as List<dynamic>?)
               ?.map((c) => Comment.fromJson(c))
-              .toList() ??
-          [],
-    );
-  }
-
-  Memory copyWith({
-    String? id,
-    String? photo,
-    String? text,
-    String? author,
-    String? authorId,
-    DateTime? createdAt,
-    bool? discovered,
-    List<Comment>? comments,
-  }) {
-    return Memory(
-      id: id ?? this.id,
-      photo: photo ?? this.photo,
-      text: text ?? this.text,
-      author: author ?? this.author,
-      authorId: authorId ?? this.authorId,
-      createdAt: createdAt ?? this.createdAt,
-      discovered: discovered ?? this.discovered,
-      comments: comments ?? this.comments,
+              .toList() ?? [],
+      starRating: json['starRating'] ?? 3,
     );
   }
 }
-

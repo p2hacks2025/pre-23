@@ -1,5 +1,3 @@
-// lib/screens/home_screen.dart
-
 import 'package:flutter/material.dart';
 import '../models/memory.dart';
 import '../models/comment.dart';
@@ -9,20 +7,13 @@ import '../services/auth_service.dart';
 import 'memory_post_screen.dart';
 import 'create_memory_screen.dart';
 import 'digging_game_screen.dart';
-import 'collection_screen.dart';
-import 'achievements_screen.dart';
 import 'profile_screen.dart';
 import '../widgets/navigation_bar.dart';
 import 'sign_in_screen.dart';
 import '../models/user_profile.dart';
 
-enum CurrentView {
-  home,
-  create,
-  dig,
-  collection,
-  achievements,
-}
+// Viewの定義
+enum CurrentView { home, mypage, create, dig }
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -32,164 +23,87 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  final GlobalKey _createMemoryKey = GlobalKey();
   CurrentView _currentView = CurrentView.home;
-  bool _createFromHome = false;
-  
+  Memory? _selectedDigTarget;
+  bool _isLoading = true;
+  int _dailyDigs = 3;
+
+  UserProfile _userProfile = UserProfile(id: 'guest', username: 'ゲスト', avatar: '', bio: '');
+  List<Memory> _memories = [];
+
   final ApiService _apiService = ApiService();
   final AuthService _authService = AuthService();
-
-  UserProfile _userProfile = UserProfile(id: '', username: '', avatar: '', bio: '');
-  List<Memory> _memories = [];
-  List<Item> _items = [];
-  List<Achievement> _achievements = [];
-  List<Memory> _undiscoveredMemories = [];
-  int _totalDigs = 0;
-  int _dailyDigs = 3;
-  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadData();
-    });
-  }
-
-  List<Memory> generateDebugMemories() {
-    final now = DateTime.now();
-    return [
-      Memory(
-        id: 'debug_1',
-        photo: 'https://picsum.photos/id/10/400/400',
-        text: '新鮮な思い出（10回クリック）',
-        author: 'Tester',
-        createdAt: now.subtract(const Duration(days: 2)), // 必須
-        discovered: false,                               // 必須
-        comments: [],                                    // 必須
-      ),
-      Memory(
-        id: 'debug_2',
-        photo: 'https://picsum.photos/id/20/400/400',
-        text: 'カチカチの思い出（20回クリック）',
-        author: 'Tester',
-        createdAt: now.subtract(const Duration(days: 30)), // 必須
-        discovered: false,                                // 必須
-        comments: [],                                     // 必須
-      ),
-      Memory(
-        id: 'debug_3',
-        photo: 'https://picsum.photos/id/30/400/400',
-        text: '歴史的な思い出（5回クリック）',
-        author: 'Tester',
-        createdAt: now.subtract(const Duration(days: 200)), // 必須
-        discovered: false,                                 // 必須
-        comments: [],                                      // 必須
-      ),
-    ];
-  }
-
-  bool isSameDay(DateTime a, DateTime b) {
-    return a.year == b.year && a.month == b.month && a.day == b.day;
+    _loadData();
   }
 
   Future<void> _loadData() async {
+    if (!mounted) return;
+    setState(() => _isLoading = true);
     try {
       final profile = await _authService.getCurrentUser();
-      
-      // ネットワークエラーが出る可能性が高い部分を try-catch で囲むか、
-      // 一時的にコメントアウトしてデバッグデータのみにします
-      /* final userMemories = await _apiService.fetchUserMemories(profile.id);
-      final items = await _apiService.fetchUserItems(profile.id);
-      ...
-      */
-
       if (!mounted) return;
-
       setState(() {
         _userProfile = profile;
+        _memories = generateDebugMemories(profile);
         _isLoading = false;
-        // ❌ エラーが出る通信データの代わりに、生成したデバッグデータを入れる
-        _undiscoveredMemories = generateDebugMemories(); 
-        _memories = []; // 必要ならここにもサンプルを入れる
       });
     } catch (e) {
-      debugPrint('⚠️ Firebase connection failed, using debug data: $e');
-      if (mounted) {
-        setState(() {
-          _undiscoveredMemories = generateDebugMemories();
-          _isLoading = false;
-        });
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _handleCreateMemory(String localPath, String text, String author) async {
-    final user = await _authService.getCurrentUser();
-    if (user.id == 'guest') return;
-    await _apiService.postMemory(
-      localPhotoPath: localPath, 
-      text: text,
-      author: author,
-      authorId: user.id, 
-    );
-    await _loadData();
-    setState(() {
-      _currentView = CurrentView.home;
-      _createFromHome = false;
-    });
-  }
-
-  Future<void> _handleDiscoverMemory(Memory memory) async {
-  setState(() {
-    // 1. 対象を「発見済み」に変更
-    final found = memory.copyWith(discovered: true);
-    
-    // 2. 未発見リストから削除
-    _undiscoveredMemories.removeWhere((m) => m.id == memory.id);
-    
-    // 3. 発見済みリストの先頭に追加
-    _memories.insert(0, found);
-    
-    // 4. 即座にホーム画面に戻る
-    _currentView = CurrentView.home;
-  });
-
-  // 裏でFirebase保存（エラーが起きても画面は更新済み）
-  try {
-    await _apiService.discoverMemory(memory, _userProfile.id);
-  } catch (e) {
-    print("Firebase update failed: $e");
-  }
-}
-
-  Future<void> _handleDiscoverItem(Item item) async {
-    final user = await _authService.getCurrentUser();
-    if (user.id == 'guest') return;
-    await _apiService.discoverItem(item, user.id);
-    await _loadData();
-  }
-
-  void _setDailyDigs(int newCount) {
-    if (mounted) setState(() => _dailyDigs = newCount);
-  }
-
-  Future<void> _handleSaveProfile(UserProfile updatedProfile) async {
-    await _authService.signInWithUsername(updatedProfile.username); 
-    await _loadData();
-  }
-
+  // --- サインイン処理 ---
   void _handleRequestSignIn() {
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (context) => SignInScreen(
         onSignedIn: (profile) async {
-          Navigator.of(context).pop();
+          await Future.delayed(const Duration(milliseconds: 200));
+          if (!mounted) return;
+          
           await _loadData();
+          setState(() {
+            _currentView = CurrentView.home;
+          });
         },
         onCancel: () => Navigator.of(context).pop(),
       ),
     );
+  }
+
+  // --- 記憶の投稿処理 (匿名投稿を許可) ---
+  Future<void> _handleCreateMemory(String path, String text, String author, int stars) async {
+    // ★ 修正: _userProfile.id == 'guest' のガードを外し、匿名でも投稿可能にする
+    // ただし、authorが空の場合は「名無しさん」などにする
+    final String finalAuthor = author.isEmpty ? '凍土の旅人' : author;
+
+    try {
+      await _apiService.postMemory(
+        localPhotoPath: path,
+        text: text,
+        author: finalAuthor,
+        authorId: _userProfile.id, // 'guest' のまま送信
+      );
+      
+      // 投稿後にデータを更新
+      await _loadData();
+      
+      // 投稿一覧へ遷移（匿名でもマイページで見れるようにする）
+      if (mounted) setState(() => _currentView = CurrentView.mypage);
+      
+    } catch (e) {
+      debugPrint('Post Error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('投稿に失敗しました。'))
+        );
+      }
+    }
   }
 
   Widget _buildBody() {
@@ -199,130 +113,126 @@ class _HomeScreenState extends State<HomeScreen> {
 
     switch (_currentView) {
       case CurrentView.home:
-        final allMemories = [..._memories, ..._undiscoveredMemories];
-  return MemoryPostScreen(
-        memories: allMemories,
-        // ★ エラー解決: 必須パラメータをすべて追加
-        onAddComment: (memoryId, text, author) async {
-          final user = await _authService.getCurrentUser();
-          final newComment = Comment(
-            id: _apiService.uuidGenerator.v4(),
-            author: author,
-            text: text,
-            createdAt: DateTime.now(),
-          );
-          await _apiService.addComment(memoryId, newComment);
-          _loadData();
-        },
-        onEditMemory: (memory) {
-          // 編集処理が必要ならここに記述
-        },
-        onDeleteMemory: (id) async {
-          await _apiService.deleteMemory(id);
-          _loadData();
-        },
-        // ★ 追加: 凍った投稿をタップした時に発掘画面へ
-        onTapMemory: (memory) {
-          if (!memory.discovered) {
-            setState(() {
-              _currentView = CurrentView.dig;
-              // ターゲットを指定したい場合は変数を追加して保持する
-            });
-          }
-        },
-      );
+        final others = _memories.where((m) => m.authorId != _userProfile.id).toList();
+        return MemoryPostScreen(
+          memories: others,
+          onAddComment: (id, t, a) {},
+          onDeleteMemory: (id) {},
+          onEditMemory: (m) {},
+          onTapMemory: (memory) {
+            if (!memory.discovered) {
+              setState(() {
+                _selectedDigTarget = memory;
+                _currentView = CurrentView.dig;
+              });
+            }
+          },
+        );
+
+      case CurrentView.mypage:
+        // ★ 修正: ゲストでも「自分の投稿」を表示できるようにプレースホルダーを外す
+        final my = _memories.where((m) => m.authorId == _userProfile.id).toList();
+        return MemoryPostScreen(
+          memories: my,
+          onAddComment: (id, t, a) {},
+          onDeleteMemory: (id) {},
+          onEditMemory: (m) {},
+          onTapMemory: (memory) {},
+        );
+
       case CurrentView.create:
         return CreateMemoryScreen(
-          key: _createMemoryKey,
-          initialAuthor: _createFromHome ? _userProfile.username : null,
-          onSubmit: _handleCreateMemory,
-          onCancel: () => setState(() {
-            _currentView = CurrentView.home;
-            _createFromHome = false;
-          }),
+          // ゲストの場合は作成者名を null にして入力を促す、または「ゲスト」を初期値にする
+          initialAuthor: _userProfile.id == 'guest' ? '凍土の旅人' : _userProfile.username,
+          onSubmit: (String path, String text, String author, int stars) {
+            _handleCreateMemory(path, text, author, stars);
+          },
+          onCancel: () => setState(() => _currentView = CurrentView.home),
         );
+
       case CurrentView.dig:
+        if (_selectedDigTarget == null) return const SizedBox();
         return DiggingGameScreen(
-          undiscoveredMemories: _undiscoveredMemories,
-          onDiscover: _handleDiscoverMemory,
-          onDiscoverItem: _handleDiscoverItem,
+          undiscoveredMemories: [_selectedDigTarget!],
+          onDiscover: (m) {
+            setState(() {
+              _currentView = CurrentView.home;
+              _selectedDigTarget = null;
+            });
+            _loadData();
+          },
+          onDiscoverItem: (item) {},
           dailyDigs: _dailyDigs,
-          onDailyDigsChanged: _setDailyDigs,
-          // ここには他の引数を入れないでください
-        );
-      case CurrentView.collection:
-        return CollectionScreen(items: _items); 
-      case CurrentView.achievements:
-        return AchievementsScreen(
-          achievements: _achievements,
-          totalDigs: _totalDigs, 
+          onDailyDigsChanged: (count) => setState(() => _dailyDigs = count),
         );
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final bool showFab = _currentView == CurrentView.home && _userProfile.id != 'guest';
+    final bool isMainView = (_currentView == CurrentView.home || _currentView == CurrentView.mypage);
 
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        title: const Text('永久凍土の記憶', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(_currentView == CurrentView.mypage ? '自分の記憶' : '永久凍土の記憶'),
         backgroundColor: Colors.transparent,
-        elevation: 0,
         actions: [
           IconButton(
-            icon: CircleAvatar(
-              radius: 16,
-              backgroundColor: Colors.cyan.withAlpha((0.2 * 255).round()), 
-              child: Text(_userProfile.username.isNotEmpty ? _userProfile.username[0] : 'G',
-                  style: const TextStyle(color: Colors.cyan)),
-            ),
+            icon: Icon(_userProfile.id == 'guest' ? Icons.login : Icons.person_outline, color: Colors.cyan),
             onPressed: () {
-              showModalBottomSheet(
-                context: context,
-                isScrollControlled: true,
-                backgroundColor: Colors.transparent,
-                builder: (context) => ProfileScreen(
-                  profile: _userProfile,
-                  onSave: _handleSaveProfile,
-                  onClose: () => Navigator.of(context).pop(),
-                  onRequestSignIn: _handleRequestSignIn,
-                ),
-              );
+              if (_userProfile.id == 'guest') {
+                _handleRequestSignIn();
+              } else {
+                showModalBottomSheet(
+                  context: context,
+                  isScrollControlled: true,
+                  backgroundColor: Colors.transparent,
+                  builder: (context) => ProfileScreen(
+                    profile: _userProfile,
+                    onSave: (p) async { await _authService.signInWithUsername(p.username); _loadData(); },
+                    onClose: () => Navigator.of(context).pop(),
+                    onRequestSignIn: _handleRequestSignIn,
+                  ),
+                );
+              }
             },
           ),
-          const SizedBox(width: 8),
         ],
       ),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Column(
-            children: [
-              Expanded(child: _buildBody()),
+        child: Column(
+          children: [
+            Expanded(child: _buildBody()),
+            if (isMainView)
               AppNavigationBar(
                 currentView: _currentView,
                 onViewChanged: (view) => setState(() => _currentView = view),
               ),
-              const SizedBox(height: 8),
-            ],
-          ),
+          ],
         ),
       ),
-      floatingActionButton: showFab
+      floatingActionButton: isMainView
           ? FloatingActionButton(
               onPressed: () {
-                setState(() {
-                  _currentView = CurrentView.create;
-                  _createFromHome = true;
-                });
+                // ★ 修正: 匿名(guest)でも投稿画面へ行けるようにガードを外す
+                setState(() => _currentView = CurrentView.create);
               },
               backgroundColor: Colors.cyan,
-              foregroundColor: Colors.black,
-              child: const Icon(Icons.edit),
+              child: const Icon(Icons.add, color: Colors.black, size: 32),
             )
           : null,
     );
+  }
+
+  List<Memory> generateDebugMemories(UserProfile profile) {
+    final now = DateTime.now();
+    return [
+      Memory(
+        id: '1', photo: 'https://picsum.photos/id/10/400/400', text: '誰かの思い出',
+        author: 'UserA', authorId: 'other', createdAt: now.subtract(const Duration(days: 2)),
+        discovered: false, comments: [], starRating: 3,
+      ),
+    ];
   }
 }

@@ -1,6 +1,6 @@
 import 'dart:math';
 import 'dart:io';
-import 'dart:ui'; // ★ 重要: ImageFilterのために追加
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../models/memory.dart';
 import '../models/game.dart';
@@ -28,7 +28,6 @@ class DiggingGameScreen extends StatefulWidget {
 class _DiggingGameScreenState extends State<DiggingGameScreen> with TickerProviderStateMixin {
   Memory? _targetMemory;
   int _clickCount = 0;
-  int _requiredClicks = 10;
   bool _isFinished = false;
 
   late AnimationController _breakController;
@@ -44,17 +43,13 @@ class _DiggingGameScreenState extends State<DiggingGameScreen> with TickerProvid
   }
 
   void _setupGame() {
+    if (!mounted) return;
     if (widget.undiscoveredMemories.isEmpty) {
       setState(() => _targetMemory = null);
       return;
     }
     setState(() {
       _targetMemory = widget.undiscoveredMemories[Random().nextInt(widget.undiscoveredMemories.length)];
-      final daysPassed = DateTime.now().difference(_targetMemory!.createdAt).inDays;
-      if (daysPassed > 180) _requiredClicks = 5;
-      else if (daysPassed > 7) _requiredClicks = 20;
-      else _requiredClicks = 10;
-      
       _clickCount = 0;
       _isFinished = false;
       _breakController.reset();
@@ -63,28 +58,143 @@ class _DiggingGameScreenState extends State<DiggingGameScreen> with TickerProvid
 
   void _handleTap() {
     if (_isFinished || _targetMemory == null) return;
+
     setState(() {
       _clickCount++;
-      if (_clickCount >= _requiredClicks) {
+      if (_clickCount >= _targetMemory!.requiredClicks) {
         _isFinished = true;
-        _breakController.forward().then((_) => widget.onDiscover(_targetMemory!));
+        _breakController.forward().then((_) {
+          if (mounted) {
+            // 発掘完了を親に通知
+            widget.onDiscover(_targetMemory!);
+            // リアクションダイアログを表示
+            _showReactionDialog(context, _targetMemory!);
+          }
+        });
       }
     });
   }
 
+  // --- ★ 通知ロジックの強化 ---
+  void _sendNotificationToAuthor({
+    required String emoji,
+    required String? authorId,
+    required String memoryId,
+  }) {
+    if (authorId == null) return;
+    
+    // ここで将来的に API や Firebase に通知データを送ります
+    debugPrint('【通知発信】');
+    debugPrint('宛先(AuthorID): $authorId');
+    debugPrint('対象(MemoryID): $memoryId');
+    debugPrint('スタンプ: $emoji');
+    
+    // TODO: _apiService.sendStampNotification(...) などをここに書く
+  }
+
+  void _showReactionDialog(BuildContext context, Memory memory) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.cyan.shade900.withOpacity(0.95),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: const Text('発掘成功！想いを届ける', 
+          textAlign: TextAlign.center, 
+          style: TextStyle(color: Colors.white, fontSize: 18)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: SizedBox(
+                height: 150,
+                width: double.infinity,
+                child: memory.photo.startsWith('http')
+                    ? Image.network(memory.photo, fit: BoxFit.cover)
+                    : Image.file(File(memory.photo), fit: BoxFit.cover),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text('by ${memory.author}', style: const TextStyle(color: Colors.cyanAccent, fontSize: 12)),
+            const SizedBox(height: 8),
+            Text(memory.text, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 14)),
+            const SizedBox(height: 20),
+            // ★ スタンプボタンエリア
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _stampButton(context, '❄️', '雪の結晶', memory),
+                _stampButton(context, '⛏️', '労い', memory),
+                _stampButton(context, '🔥', '暖かさ', memory),
+                _stampButton(context, '💡', 'ひらめき', memory),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _stampButton(BuildContext context, String emoji, String label, Memory memory) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        GestureDetector(
+          onTap: () {
+            // ★ 通知を送る
+            _sendNotificationToAuthor(
+              emoji: emoji, 
+              authorId: memory.authorId, 
+              memoryId: memory.id
+            );
+            
+            Navigator.pop(context); // ダイアログを閉じる
+
+            if (!mounted) return;
+
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('投稿主に $emoji を届けました'),
+                duration: const Duration(seconds: 2),
+                backgroundColor: Colors.cyan.shade700,
+              ),
+            );
+
+            _setupGame(); // 次のゲームへ
+          },
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.1),
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white24)
+            ),
+            child: Text(emoji, style: const TextStyle(fontSize: 24)),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 10)),
+      ],
+    );
+  }
+
+  // --- UI構築 ---
   @override
   Widget build(BuildContext context) {
     if (_targetMemory == null) {
       return const Center(child: Text("未発掘の記憶はありません", style: TextStyle(color: Colors.white)));
     }
 
-    double opacity = (1.0 - (_clickCount / _requiredClicks)).clamp(0.0, 1.0);
+    double opacity = (1.0 - (_clickCount / _targetMemory!.requiredClicks)).clamp(0.0, 1.0);
 
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Column(
         children: [
-          _buildInfoSection(),
+          const SizedBox(height: 60),
+          Text("氷の厚さ: ${_targetMemory!.requiredClicks - _clickCount} 層", 
+            style: const TextStyle(color: Colors.cyan, fontSize: 20, fontWeight: FontWeight.bold)),
           Expanded(
             child: GestureDetector(
               onTap: _handleTap,
@@ -100,8 +210,22 @@ class _DiggingGameScreenState extends State<DiggingGameScreen> with TickerProvid
               ),
             ),
           ),
-          _buildFooterSection(),
+          const Text("タップして解凍", style: TextStyle(color: Colors.white70)),
+          const SizedBox(height: 40),
         ],
+      ),
+    );
+  }
+
+  Widget _buildMemoryImage() {
+    return Container(
+      width: 320, height: 320,
+      decoration: BoxDecoration(borderRadius: BorderRadius.circular(24)),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: _targetMemory!.photo.startsWith('http')
+            ? Image.network(_targetMemory!.photo, fit: BoxFit.cover)
+            : Image.file(File(_targetMemory!.photo), fit: BoxFit.cover),
       ),
     );
   }
@@ -112,52 +236,28 @@ class _DiggingGameScreenState extends State<DiggingGameScreen> with TickerProvid
       opacity: opacity,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(24),
-        child: Container(
-          width: 320,
-          height: 320,
+        child: SizedBox(
+          width: 320, height: 320,
           child: Stack(
             children: [
-              // 1. 背後をぼかす（すりガラス効果）
               BackdropFilter(
                 filter: ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
                 child: Container(color: Colors.white.withOpacity(0.1)),
               ),
-              // 2. 氷の質感グラデーション
               Container(
                 decoration: BoxDecoration(
                   border: Border.all(color: Colors.white.withOpacity(0.4), width: 2),
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
-                    colors: [
-                      Colors.white.withOpacity(0.7),
-                      Colors.cyan.withOpacity(0.2),
-                      Colors.blue.withOpacity(0.1),
-                    ],
+                    colors: [Colors.white.withOpacity(0.7), Colors.cyan.withOpacity(0.2), Colors.blue.withOpacity(0.1)],
                   ),
                 ),
               ),
-              // 3. 氷の結晶
-              const Center(
-                child: Icon(Icons.ac_unit, size: 80, color: Colors.white54),
-              ),
+              const Center(child: Icon(Icons.ac_unit, size: 80, color: Colors.white54)),
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  // --- 以下の _buildMemoryImage, _buildBreakEffect 等は以前と同じ ---
-  Widget _buildMemoryImage() {
-    return Container(
-      width: 320, height: 320,
-      decoration: BoxDecoration(borderRadius: BorderRadius.circular(24)),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(24),
-        child: _targetMemory!.photo.startsWith('http')
-            ? Image.network(_targetMemory!.photo, fit: BoxFit.cover)
-            : Image.file(File(_targetMemory!.photo), fit: BoxFit.cover),
       ),
     );
   }
@@ -173,18 +273,6 @@ class _DiggingGameScreenState extends State<DiggingGameScreen> with TickerProvid
         ),
       ),
     );
-  }
-
-  Widget _buildInfoSection() {
-    return Padding(
-      padding: const EdgeInsets.all(20),
-      child: Text("氷の厚さ: ${_requiredClicks - _clickCount} 層", 
-        style: const TextStyle(color: Colors.cyan, fontSize: 18, fontWeight: FontWeight.bold)),
-    );
-  }
-
-  Widget _buildFooterSection() {
-    return Container(padding: const EdgeInsets.all(40), child: const Text("タップして解凍", style: TextStyle(color: Colors.white70)));
   }
 
   @override

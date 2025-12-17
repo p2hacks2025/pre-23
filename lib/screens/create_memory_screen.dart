@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 class CreateMemoryScreen extends StatefulWidget {
-  final Function(String photo, String text, String author) onSubmit;
+  // ★ starRatingを引数に追加するように修正
+  final Function(String photo, String text, String author, int starRating) onSubmit;
   final VoidCallback onCancel;
   final String? initialAuthor;
 
@@ -23,6 +24,9 @@ class _CreateMemoryScreenState extends State<CreateMemoryScreen> {
   final _textController = TextEditingController();
   late TextEditingController _authorController;
   final ImagePicker _picker = ImagePicker();
+  
+  // ★ キラキラ度の状態をこちらで管理
+  int _starRating = 1;
 
   Future<void> _pickImage() async {
     try {
@@ -50,15 +54,18 @@ class _CreateMemoryScreenState extends State<CreateMemoryScreen> {
     if (_selectedImage != null &&
         _textController.text.trim().isNotEmpty &&
         _authorController.text.trim().isNotEmpty) {
+      // ★ 引数に _starRating を追加
       widget.onSubmit(
         _selectedImage!.path,
         _textController.text.trim(),
         _authorController.text.trim(),
+        _starRating,
       );
       setState(() {
         _selectedImage = null;
         _textController.clear();
         _authorController.clear();
+        _starRating = 1; // リセット
       });
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -67,9 +74,39 @@ class _CreateMemoryScreenState extends State<CreateMemoryScreen> {
     }
   }
 
-  // 公開メソッド: 親ウィジェットからフォーム送信をトリガーするために使用します
   void submitForm() {
     _submit();
+  }
+
+  // ★ 星を選択するUIウィジェット
+  Widget _buildStarRating() {
+    return Column(
+      children: [
+        const Text(
+          'キラキラ度',
+          style: TextStyle(color: Colors.white70, fontSize: 14),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(3, (index) {
+            int starValue = index + 1;
+            return IconButton(
+              icon: Icon(
+                starValue <= _starRating ? Icons.star : Icons.star_border,
+                color: Colors.amber,
+                size: 40,
+              ),
+              onPressed: () {
+                setState(() {
+                  _starRating = starValue;
+                });
+              },
+            );
+          }),
+        ),
+      ],
+    );
   }
 
   @override
@@ -81,13 +118,13 @@ class _CreateMemoryScreenState extends State<CreateMemoryScreen> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-                colors: [
-                  Colors.cyan.withAlpha(51),
-                  Colors.blue.withAlpha(51),
+            colors: [
+              Colors.cyan.withAlpha(51),
+              Colors.blue.withAlpha(51),
             ],
           ),
           borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: Colors.cyan.withAlpha(77)),
+          border: Border.all(color: Colors.cyan.withAlpha(77)),
         ),
         padding: const EdgeInsets.all(24),
         child: Column(
@@ -107,11 +144,11 @@ class _CreateMemoryScreenState extends State<CreateMemoryScreen> {
               onTap: _pickImage,
               child: Container(
                 height: 256,
-                  decoration: BoxDecoration(
-                        color: Colors.cyan.shade900.withAlpha(77),
+                decoration: BoxDecoration(
+                  color: Colors.cyan.shade900.withAlpha(77),
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                        color: Colors.cyan.withAlpha(128),
+                    color: Colors.cyan.withAlpha(128),
                     style: BorderStyle.solid,
                     width: 2,
                   ),
@@ -159,6 +196,11 @@ class _CreateMemoryScreenState extends State<CreateMemoryScreen> {
               ),
             ),
             const SizedBox(height: 24),
+            
+            // ★ キラキラ度入力UIを追加
+            _buildStarRating(),
+            const SizedBox(height: 24),
+
             // Comment Input
             TextField(
               controller: _textController,
@@ -166,14 +208,14 @@ class _CreateMemoryScreenState extends State<CreateMemoryScreen> {
                 labelText: 'コメント',
                 labelStyle: TextStyle(color: Colors.cyan[300]),
                 filled: true,
-                    fillColor: Colors.cyan.shade900.withAlpha(128),
+                fillColor: Colors.cyan.shade900.withAlpha(128),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(16),
-                      borderSide: BorderSide(color: Colors.cyan.withAlpha(77)),
+                  borderSide: BorderSide(color: Colors.cyan.withAlpha(77)),
                 ),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(16),
-                      borderSide: BorderSide(color: Colors.cyan.withAlpha(77)),
+                  borderSide: BorderSide(color: Colors.cyan.withAlpha(77)),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(16),
@@ -184,7 +226,7 @@ class _CreateMemoryScreenState extends State<CreateMemoryScreen> {
               style: const TextStyle(color: Colors.white),
             ),
             const SizedBox(height: 24),
-            // Author Input (omit when initialAuthor provided)
+            // Author Input
             if (widget.initialAuthor == null)
               TextField(
                 controller: _authorController,
@@ -192,14 +234,14 @@ class _CreateMemoryScreenState extends State<CreateMemoryScreen> {
                   labelText: '投稿者名',
                   labelStyle: TextStyle(color: Colors.cyan[300]),
                   filled: true,
-                      fillColor: Colors.cyan.shade900.withAlpha(128),
+                  fillColor: Colors.cyan.shade900.withAlpha(128),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(16),
-                        borderSide: BorderSide(color: Colors.cyan.withAlpha(77)),
+                    borderSide: BorderSide(color: Colors.cyan.withAlpha(77)),
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(16),
-                        borderSide: BorderSide(color: Colors.cyan.withAlpha(77)),
+                    borderSide: BorderSide(color: Colors.cyan.withAlpha(77)),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(16),
@@ -225,7 +267,7 @@ class _CreateMemoryScreenState extends State<CreateMemoryScreen> {
                     onPressed: widget.onCancel,
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),
-                          side: BorderSide(color: Colors.cyan.withAlpha(77)),
+                      side: BorderSide(color: Colors.cyan.withAlpha(77)),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
                       ),
@@ -260,5 +302,11 @@ class _CreateMemoryScreenState extends State<CreateMemoryScreen> {
       ),
     );
   }
-}
 
+  @override
+  void dispose() {
+    _textController.dispose();
+    _authorController.dispose();
+    super.dispose();
+  }
+}
