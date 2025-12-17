@@ -1,4 +1,37 @@
-import 'comment.dart';
+// lib/models/memory.dart
+// コメントクラスもここに同居させます
+
+class Comment {
+  final String id;
+  final String author;
+  final String text;
+  final DateTime createdAt;
+
+  Comment({
+    required this.id,
+    required this.author,
+    required this.text,
+    required this.createdAt,
+  });
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'author': author,
+      'text': text,
+      'createdAt': createdAt.toIso8601String(),
+    };
+  }
+
+  factory Comment.fromJson(Map<String, dynamic> json) {
+    return Comment(
+      id: json['id'],
+      author: json['author'],
+      text: json['text'],
+      createdAt: DateTime.parse(json['createdAt']),
+    );
+  }
+}
 
 class Memory {
   final String id;
@@ -7,9 +40,9 @@ class Memory {
   final String author;
   final String? authorId;
   final DateTime createdAt;
-   bool discovered;
+  bool discovered;
   final List<Comment> comments;
-  final int starRating; // 星の数（1〜5）
+  final int starRating;
 
   Memory({
     required this.id,
@@ -20,11 +53,9 @@ class Memory {
     required this.createdAt,
     required this.discovered,
     required this.comments,
-    this.starRating = 3, // デフォルト値
+    this.starRating = 3,
   });
 
-  // ★ この行がエラーを解決します！
-  // 星1なら10回、星5なら50回のタップが必要になる計算です
   int get requiredClicks => starRating * 10;
 
   Map<String, dynamic> toJson() {
@@ -44,15 +75,15 @@ class Memory {
   factory Memory.fromJson(Map<String, dynamic> json) {
     return Memory(
       id: json['id'],
-      photo: json['photo'],
-      text: json['text'],
-      author: json['author'],
+      photo: json['photo'] ?? '',
+      text: json['text'] ?? '',
+      author: json['author'] ?? 'Unknown',
       authorId: json['authorId'],
       createdAt: DateTime.parse(json['createdAt']),
       discovered: json['discovered'] ?? false,
-      comments: (json['comments'] as List<dynamic>?)
-              ?.map((c) => Comment.fromJson(c))
-              .toList() ?? [],
+      comments: (json['comments'] as List<dynamic>? ?? [])
+          .map((c) => Comment.fromJson(c))
+          .toList(),
       starRating: json['starRating'] ?? 3,
     );
   }

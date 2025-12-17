@@ -1,3 +1,5 @@
+// lib/screens/digging_game_screen.dart
+
 import 'dart:math';
 import 'dart:io';
 import 'dart:ui';
@@ -12,6 +14,10 @@ class DiggingGameScreen extends StatefulWidget {
   final int dailyDigs;
   final Function(int) onDailyDigsChanged;
 
+  // ★ 追加パラメータ: ゲスト情報とログイン誘導コールバック
+  final bool isGuest;
+  final VoidCallback onRequestLogin;
+
   const DiggingGameScreen({
     super.key,
     required this.undiscoveredMemories,
@@ -19,6 +25,9 @@ class DiggingGameScreen extends StatefulWidget {
     required this.onDiscoverItem,
     required this.dailyDigs,
     required this.onDailyDigsChanged,
+    // 初期値設定 (既存コードへの影響を最小限にするため)
+    this.isGuest = false,
+    required this.onRequestLogin,
   });
 
   @override
@@ -26,10 +35,10 @@ class DiggingGameScreen extends StatefulWidget {
 }
 
 class _DiggingGameScreenState extends State<DiggingGameScreen> with TickerProviderStateMixin {
+  // ... (既存の変数定義はそのまま)
   Memory? _targetMemory;
   int _clickCount = 0;
   bool _isFinished = false;
-
   late AnimationController _breakController;
 
   @override
@@ -65,7 +74,7 @@ class _DiggingGameScreenState extends State<DiggingGameScreen> with TickerProvid
         _isFinished = true;
         _breakController.forward().then((_) {
           if (mounted) {
-            // 発掘完了を親に通知
+            // 発掘完了を親に通知 (DB更新など)
             widget.onDiscover(_targetMemory!);
             // リアクションダイアログを表示
             _showReactionDialog(context, _targetMemory!);
@@ -75,29 +84,22 @@ class _DiggingGameScreenState extends State<DiggingGameScreen> with TickerProvid
     });
   }
 
-  // --- ★ 通知ロジックの強化 ---
   void _sendNotificationToAuthor({
     required String emoji,
     required String? authorId,
     required String memoryId,
   }) {
     if (authorId == null) return;
-    
-    // ここで将来的に API や Firebase に通知データを送ります
-    debugPrint('【通知発信】');
-    debugPrint('宛先(AuthorID): $authorId');
-    debugPrint('対象(MemoryID): $memoryId');
-    debugPrint('スタンプ: $emoji');
-    
-    // TODO: _apiService.sendStampNotification(...) などをここに書く
+    debugPrint('【通知発信】Stack: $emoji -> $authorId');
+    // TODO: Notification logic
   }
 
   void _showReactionDialog(BuildContext context, Memory memory) {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        backgroundColor: Colors.cyan.shade900.withOpacity(0.95),
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.cyan.shade900.withOpacity(0.95), // withValues -> withOpacity互換
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         title: const Text('発掘成功！想いを届ける', 
           textAlign: TextAlign.center, 
@@ -105,6 +107,7 @@ class _DiggingGameScreenState extends State<DiggingGameScreen> with TickerProvid
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // 画像表示部分 (省略なしで記述する場合は元のコードと同様)
             ClipRRect(
               borderRadius: BorderRadius.circular(16),
               child: SizedBox(
@@ -120,14 +123,15 @@ class _DiggingGameScreenState extends State<DiggingGameScreen> with TickerProvid
             const SizedBox(height: 8),
             Text(memory.text, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 14)),
             const SizedBox(height: 20),
+            
             // ★ スタンプボタンエリア
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                _stampButton(context, '❄️', '雪の結晶', memory),
-                _stampButton(context, '⛏️', '労い', memory),
-                _stampButton(context, '🔥', '暖かさ', memory),
-                _stampButton(context, '💡', 'ひらめき', memory),
+                _stampButton(ctx, '❄️', '雪の結晶', memory),
+                _stampButton(ctx, '⛏️', '労い', memory),
+                _stampButton(ctx, '🔥', '暖かさ', memory),
+                _stampButton(ctx, '💡', 'ひらめき', memory),
               ],
             ),
           ],
@@ -136,20 +140,31 @@ class _DiggingGameScreenState extends State<DiggingGameScreen> with TickerProvid
     );
   }
 
-  Widget _stampButton(BuildContext context, String emoji, String label, Memory memory) {
+  Widget _stampButton(BuildContext ctx, String emoji, String label, Memory memory) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         GestureDetector(
           onTap: () {
-            // ★ 通知を送る
+            // ★ ここでログインガード！
+            if (widget.isGuest) {
+              // ログインが必要であることを伝える（またはそのままログイン画面へ）
+              // ダイアログは閉じずに、その上にログイン画面を重ねる、あるいは一旦閉じる
+              // ここでは「一旦閉じてログイン画面へ」というフローにします
+              
+              Navigator.pop(ctx); // スタンプダイアログを閉じる
+              widget.onRequestLogin(); // 親(Home)のログイン画面呼び出しを実行
+              return;
+            }
+
+            // 通常処理
             _sendNotificationToAuthor(
               emoji: emoji, 
               authorId: memory.authorId, 
               memoryId: memory.id
             );
             
-            Navigator.pop(context); // ダイアログを閉じる
+            Navigator.pop(ctx);
 
             if (!mounted) return;
 
@@ -161,7 +176,7 @@ class _DiggingGameScreenState extends State<DiggingGameScreen> with TickerProvid
               ),
             );
 
-            _setupGame(); // 次のゲームへ
+            _setupGame(); 
           },
           child: Container(
             padding: const EdgeInsets.all(12),
@@ -179,7 +194,7 @@ class _DiggingGameScreenState extends State<DiggingGameScreen> with TickerProvid
     );
   }
 
-  // --- UI構築 ---
+  // --- UI構築 (以下、既存コードとほぼ同じ) ---
   @override
   Widget build(BuildContext context) {
     if (_targetMemory == null) {
@@ -231,6 +246,7 @@ class _DiggingGameScreenState extends State<DiggingGameScreen> with TickerProvid
   }
 
   Widget _buildIceFilter(double opacity) {
+    // 既存コードと同じ (withValues 修正済みならそのままで)
     return AnimatedOpacity(
       duration: const Duration(milliseconds: 200),
       opacity: opacity,
@@ -242,7 +258,9 @@ class _DiggingGameScreenState extends State<DiggingGameScreen> with TickerProvid
             children: [
               BackdropFilter(
                 filter: ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
-                child: Container(color: Colors.white.withOpacity(0.1)),
+                child: Container(
+                  color: Colors.white.withOpacity(0.1),
+                ),
               ),
               Container(
                 decoration: BoxDecoration(
@@ -250,7 +268,11 @@ class _DiggingGameScreenState extends State<DiggingGameScreen> with TickerProvid
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
-                    colors: [Colors.white.withOpacity(0.7), Colors.cyan.withOpacity(0.2), Colors.blue.withOpacity(0.1)],
+                    colors: [
+                      Colors.white.withOpacity(0.7),
+                      Colors.cyan.withOpacity(0.2),
+                      Colors.blue.withOpacity(0.1)
+                    ],
                   ),
                 ),
               ),
@@ -274,7 +296,7 @@ class _DiggingGameScreenState extends State<DiggingGameScreen> with TickerProvid
       ),
     );
   }
-
+  
   @override
   void dispose() {
     _breakController.dispose();

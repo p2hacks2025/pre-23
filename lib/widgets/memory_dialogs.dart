@@ -8,7 +8,8 @@ class MemoryDialogs {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF0D1B3E).withOpacity(0.95),
+        // 修正: withOpacity -> withValues
+        backgroundColor: const Color(0xFF0D1B3E).withValues(alpha: 0.95),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(24),
           side: const BorderSide(color: Colors.cyan, width: 0.5),
@@ -39,7 +40,8 @@ class MemoryDialogs {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF0D1B3E).withOpacity(0.95),
+        // 修正: withOpacity -> withValues
+        backgroundColor: const Color(0xFF0D1B3E).withValues(alpha: 0.95),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(24),
           side: const BorderSide(color: Colors.cyan, width: 0.5),
@@ -59,7 +61,8 @@ class MemoryDialogs {
             child: Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.05),
+                // 修正: withOpacity -> withValues
+                color: Colors.white.withValues(alpha: 0.05),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(emoji, style: const TextStyle(fontSize: 32)),

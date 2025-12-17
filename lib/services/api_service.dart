@@ -4,11 +4,12 @@ import 'dart:io';
 import 'package:uuid/uuid.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart'; // debugPrint用
 // import 'package:firebase_auth/firebase_auth.dart'; // 削除 (_auth未使用のため)
 import '../models/user_profile.dart';
 import '../models/memory.dart';
 import '../models/game.dart';
-import '../models/comment.dart'; 
+
 
 class ApiService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -40,37 +41,48 @@ class ApiService {
   // 記憶 (Memory) 関連の操作
   // --------------------------------------------------------------------------
 
-  // 1. 記憶の投稿 (封印)
-  Future<Memory> postMemory({
+// 1. 記憶の投稿 (封印)
+  Future<Memory?> postMemory({
     required String localPhotoPath, 
     required String text, 
     required String author, 
-    required String authorId
+    required String authorId,
+    int starRating = 3, // ★ この行を追加してください！
   }) async {
     final memoryId = _uuid.v4();
     
-    // 1-1. 画像をFirebase Storageにアップロード
-    final storageRef = _storage.ref().child('memories/$authorId/$memoryId.jpg');
-    await storageRef.putFile(File(localPhotoPath));
-    final downloadUrl = await storageRef.getDownloadURL();
-    
-    final memory = Memory(
-      id: memoryId,
-      photo: downloadUrl, 
-      text: text,
-      author: author,
-      authorId: authorId,
-      createdAt: DateTime.now(),
-      discovered: false, 
-      comments: [],
-    );
+    try {
+      final storageRef = _storage.ref().child('memories/$authorId/$memoryId.jpg');
+      
+      final file = File(localPhotoPath);
+      if (!file.existsSync()) {
+        debugPrint('Error: Local file not found at $localPhotoPath');
+        return null;
+      }
 
-    // 1-2. Firestoreに記憶ドキュメントを保存
-    await _db.collection(_memoriesCollection).doc(memoryId).set(memory.toJson());
+      await storageRef.putFile(file);
+      final downloadUrl = await storageRef.getDownloadURL();
+      
+      final memory = Memory(
+        id: memoryId,
+        photo: downloadUrl, 
+        text: text,
+        author: author,
+        authorId: authorId,
+        createdAt: DateTime.now(),
+        discovered: false, 
+        comments: [],
+        starRating: starRating, // ★ ここにも追加してください！
+      );
 
-    return memory;
+      await _db.collection(_memoriesCollection).doc(memoryId).set(memory.toJson());
+      return memory;
+
+    } catch (e) {
+      debugPrint('🔥 Error posting memory: $e');
+      return null;
+    }
   }
-  
   // 2. 自分の投稿した記憶のフェッチ (ホーム画面用)
   Future<List<Memory>> fetchUserMemories(String userId) async {
     final snapshot = await _db.collection(_memoriesCollection)
@@ -223,9 +235,9 @@ Future<void> deleteMemory(String memoryId) async {
   try {
     // Firebase Firestoreから削除する場合
     await _db.collection('memories').doc(memoryId).delete();
-    print('Memory $memoryId deleted successfully');
+    debugPrint('Memory $memoryId deleted successfully');
   } catch (e) {
-    print('Error deleting memory: $e');
+    debugPrint('Error deleting memory: $e');
     // 通信エラーなどで削除できない場合も、
     // 必要に応じてリバース処理やエラー通知を検討してください。
   }

@@ -13,77 +13,60 @@ class AppNavigationBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 現在のViewからインデックスを決定
+    // 0: Home, 1: MyPage
+    int currentIndex = 0;
+    if (currentView == CurrentView.mypage) {
+      currentIndex = 1;
+    } else {
+      // home, create, dig などは基本Homeタブのアクティブ状態とする
+      currentIndex = 0;
+    }
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-      // 背面を少し透過させて、氷の世界観を出す
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.4),
-        border: const Border(
+      decoration: const BoxDecoration(
+        // 上部に薄い境界線を入れて区切りを明確にする
+        border: Border(
           top: BorderSide(color: Colors.white12, width: 0.5),
         ),
       ),
-      child: SafeArea(
-        top: false,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center, // 中央寄せ
-          children: <Widget>[
-            // 1. ホームボタン
-            _buildNavButton(
-              icon: Icons.home_filled,
-              view: CurrentView.home,
-            ),
-            const SizedBox(width: 24), // ボタン間の余白
-            // 2. マイページボタン
-            _buildNavButton(
-              icon: Icons.person_rounded,
-              view: CurrentView.mypage,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNavButton({
-    required IconData icon,
-    required CurrentView view,
-  }) {
-    // 選択状態の判定
-    // CurrentView.create（投稿画面）のときは、ホームを光らせるようにしています
-    final isSelected = (currentView == view) || 
-                       (view == CurrentView.home && currentView == CurrentView.create);
-    
-    return GestureDetector(
-      onTap: () => onViewChanged(view),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 250),
-        curve: Curves.easeInOut,
-        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
-        decoration: BoxDecoration(
-          gradient: isSelected
-              ? const LinearGradient(
-                  colors: [Color(0xFF06B6D4), Color(0xFF3B82F6)],
-                )
-              : null,
-          color: isSelected ? null : Colors.white.withOpacity(0.08),
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(
-            color: isSelected ? Colors.cyan : Colors.white10,
-            width: 1,
+      child: BottomNavigationBar(
+        type: BottomNavigationBarType.fixed,
+        
+        // ラベルを表示せずアイコンのみにする設定
+        showSelectedLabels: false,
+        showUnselectedLabels: false,
+        
+        // 配色設定 (参考コードに準拠)
+        backgroundColor: Colors.black,
+        selectedItemColor: Colors.cyan,
+        unselectedItemColor: Colors.grey.shade700,
+        iconSize: 30, // タップしやすいサイズに調整
+        
+        currentIndex: currentIndex,
+        onTap: (index) {
+          switch (index) {
+            case 0:
+              onViewChanged(CurrentView.home);
+              break;
+            case 1:
+              onViewChanged(CurrentView.mypage);
+              break;
+          }
+        },
+        items: const [
+          // 1. ホーム (みんなの記憶)
+          BottomNavigationBarItem(
+            icon: Icon(Icons.home_filled),
+            label: 'Home',
           ),
-          boxShadow: isSelected ? [
-            BoxShadow(
-              color: Colors.cyan.withOpacity(0.3),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            )
-          ] : null,
-        ),
-        child: Icon(
-          icon, 
-          size: 24, 
-          color: isSelected ? Colors.white : Colors.white70
-        ),
+          
+          // 2. マイページ (自分の記憶)
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person), 
+            label: 'My Page',
+          ),
+        ],
       ),
     );
   }

@@ -1,24 +1,25 @@
 // lib/main.dart
 
-// 必要なインポート
 import 'package:flutter/material.dart';
-import 'package:firebase_core/firebase_core.dart'; // 💡 このインポートが必要です
-import 'firebase_options.dart'; // 💡 firebase_options.dartをインポート
-import 'screens/home_screen.dart'; 
-// ... 他のインポート
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart'; // FlutterFire CLIで生成されたファイル
+import 'screens/home_screen.dart';
 
-// main関数を async にし、Firebaseを初期化します
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   try {
-    // 1. Firebaseの初期化
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
+    // ★ 修正ポイント: 
+    // Firebaseがまだ初期化されていない場合のみ初期化を実行します。
+    // これにより "A Firebase App named [DEFAULT] already exists" エラーを防げます。
+    if (Firebase.apps.isEmpty) {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+    } else {
+      debugPrint('🔥 Firebase is already initialized');
+    }
   } catch (e) {
-    // 2. 初期化エラーのデバッグ出力
-    // このエラーが出ている場合は、WindowsのFirebase設定が不完全である可能性が高い
     debugPrint('🔥 Firebase initialization failed: $e');
   }
 
@@ -31,7 +32,15 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      // ...
+      title: 'Memory Digging App',
+      // アプリ全体のテーマ設定（必要に応じて調整してください）
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.cyan,
+          brightness: Brightness.dark, // 永久凍土の世界観に合わせてダークモードにしています
+        ),
+        useMaterial3: true,
+      ),
       home: const HomeScreen(),
     );
   }
