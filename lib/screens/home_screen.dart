@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import '../models/memory.dart';
-import '../models/comment.dart';
-import '../models/game.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import 'memory_post_screen.dart';
