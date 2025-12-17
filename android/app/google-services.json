@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "1078197154358",
-    "project_id": "flozendmemory",
-    "storage_bucket": "flozendmemory.firebasestorage.app"
+    "project_number": "264211385958",
+    "project_id": "frozenedmemories",
+    "storage_bucket": "frozenedmemories.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:1078197154358:android:7197438f0cfdeb62a01e97",
+        "mobilesdk_app_id": "1:264211385958:android:8610e1d427fa725e08a7a7",
         "android_client_info": {
           "package_name": "com.example.memory_digging_app"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyA_Inyj1d7U6DkdyiTjb1Rm0SAE_cjxT60"
+          "current_key": "AIzaSyDgoszdpdMWbMh62UNdukmCKRVm4FNSaLs"
         }
       ],
       "services": {
