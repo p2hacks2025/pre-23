@@ -7,7 +7,7 @@ class Memory {
   final String author;
   final String? authorId;
   final DateTime createdAt;
-  final bool discovered;
+   bool discovered;
   final List<Comment> comments;
   final int starRating; // 星の数（1〜5）
 
