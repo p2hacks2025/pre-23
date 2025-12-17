@@ -1,7 +1,5 @@
-// lib/widgets/navigation_bar.dart
-
 import 'package:flutter/material.dart';
-import '../screens/home_screen.dart'; // ここに CurrentView の定義がある想定
+import '../screens/home_screen.dart'; // CurrentView の定義を読み込む
 
 class AppNavigationBar extends StatelessWidget {
   final CurrentView currentView;
@@ -16,37 +14,50 @@ class AppNavigationBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      // 中央に配置するために SingleChildScrollView ではなくシンプルな Row に変更
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center, // 中央寄せ
-        children: <Widget>[
-          _buildNavButton(
-            icon: Icons.home,
-            label: 'ホーム',
-            view: CurrentView.home,
-          ),
-          const SizedBox(width: 24), // ボタン間の間隔を少し広めに
-          _buildNavButton(
-            icon: Icons.ac_unit,
-            label: '発掘',
-            view: CurrentView.dig,
-          ),
-        ],
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+      // 背面を少し透過させて、氷の世界観を出す
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.4),
+        border: const Border(
+          top: BorderSide(color: Colors.white12, width: 0.5),
+        ),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center, // 中央寄せ
+          children: <Widget>[
+            // 1. ホームボタン
+            _buildNavButton(
+              icon: Icons.home_filled,
+              view: CurrentView.home,
+            ),
+            const SizedBox(width: 24), // ボタン間の余白
+            // 2. マイページボタン
+            _buildNavButton(
+              icon: Icons.person_rounded,
+              view: CurrentView.mypage,
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildNavButton({
     required IconData icon,
-    required String label,
     required CurrentView view,
   }) {
-    final isSelected = currentView == view;
+    // 選択状態の判定
+    // CurrentView.create（投稿画面）のときは、ホームを光らせるようにしています
+    final isSelected = (currentView == view) || 
+                       (view == CurrentView.home && currentView == CurrentView.create);
+    
     return GestureDetector(
       onTap: () => onViewChanged(view),
-      child: AnimatedContainer( // アニメーション付きにするとより心地よくなります
-        duration: const Duration(milliseconds: 200),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeInOut,
         padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
         decoration: BoxDecoration(
           gradient: isSelected
@@ -54,32 +65,24 @@ class AppNavigationBar extends StatelessWidget {
                   colors: [Color(0xFF06B6D4), Color(0xFF3B82F6)],
                 )
               : null,
-          color: isSelected ? null : Colors.white.withOpacity(0.05),
+          color: isSelected ? null : Colors.white.withOpacity(0.08),
           borderRadius: BorderRadius.circular(24),
           border: Border.all(
-            color: isSelected 
-                ? Colors.cyan 
-                : Colors.cyan.withOpacity(0.2),
+            color: isSelected ? Colors.cyan : Colors.white10,
             width: 1,
           ),
+          boxShadow: isSelected ? [
+            BoxShadow(
+              color: Colors.cyan.withOpacity(0.3),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            )
+          ] : null,
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon, 
-              size: 20, 
-              color: isSelected ? Colors.white : Colors.cyan[100]
-            ),
-            const SizedBox(width: 8),
-            Text(
-              label,
-              style: TextStyle(
-                color: isSelected ? Colors.white : Colors.cyan[100],
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-              ),
-            ),
-          ],
+        child: Icon(
+          icon, 
+          size: 24, 
+          color: isSelected ? Colors.white : Colors.white70
         ),
       ),
     );
