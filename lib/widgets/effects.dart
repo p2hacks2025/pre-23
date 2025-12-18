@@ -1,35 +1,29 @@
-// lib/widgets/effects.dart
 import 'dart:io';
 import 'dart:ui';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import '../models/memory.dart';
 
 class IceEffects {
-  // ★ 画像リストを一括管理
   static const List<String> iceImages = [
     'assets/icefilter1.png',
     'assets/icefilter2.jpg',
     'assets/icefilter3.jpg',
   ];
 
-  // ★ 共通のガラススタイル
   static BoxDecoration glassStyle = BoxDecoration(
     borderRadius: BorderRadius.circular(16),
     border: Border.all(color: Colors.white.withOpacity(0.2), width: 0.5),
     image: DecorationImage(
-      image: AssetImage(iceImages[0]), // デフォルト
+      image: AssetImage(iceImages[0]), 
       fit: BoxFit.cover,
       opacity: 0.25,
-      colorFilter: const ColorFilter.mode(
-        Color(0xFF1E293B), 
-        BlendMode.multiply,
-      ),
+      colorFilter: const ColorFilter.mode(Color(0xFF1E293B), BlendMode.multiply),
     ),
     color: const Color(0xFF1E293B),
   );
 
-  // ★ 指定したindexの氷画像デコレーションを返す関数（エラー回避付き）
   static DecorationImage getIceDecoration(int index, {double opacity = 0.6}) {
     return DecorationImage(
       image: AssetImage(iceImages[index % iceImages.length]),
@@ -135,4 +129,12 @@ class IceEffects {
       ],
     );
   }
+}
+
+class SparklePoint {
+  double x = Random().nextDouble();
+  double y = Random().nextDouble();
+  double size = Random().nextDouble() * 10 + 6;
+  Color color = [Colors.cyanAccent, Colors.white, Colors.blueAccent, Colors.yellowAccent][Random().nextInt(4)];
+  double speed = Random().nextDouble() * 0.3 + 0.2;
 }
