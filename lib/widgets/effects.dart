@@ -1,3 +1,4 @@
+// lib/widgets/effects.dart
 import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
