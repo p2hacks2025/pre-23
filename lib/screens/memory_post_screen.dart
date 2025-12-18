@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import '../models/memory.dart';
+// 同じフォルダにある場合
 
 class MemoryPostScreen extends StatelessWidget {
   final List<Memory> memories;

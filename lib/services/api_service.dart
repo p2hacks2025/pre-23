@@ -63,6 +63,11 @@ class ApiService {
       createdAt: DateTime.now(),
       discovered: false, 
       comments: [],
+      // --- ★ 修正箇所：追加された必須パラメータと初期値を指定 ---
+      guestComments: [], // 投稿時はまだコメントはないため空リスト
+      stampsCount: 0,    // 初期値 0
+      digCount: 0,       // 初期値 0
+      starRating: 3,
     );
 
     // 1-2. Firestoreに記憶ドキュメントを保存

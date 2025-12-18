@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../screens/home_screen.dart'; // CurrentView の定義を読み込む
+import '../screens/home_screen.dart';
 
 class AppNavigationBar extends StatelessWidget {
   final CurrentView currentView;
@@ -14,76 +14,43 @@ class AppNavigationBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-      // 背面を少し透過させて、氷の世界観を出す
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.4),
-        border: const Border(
-          top: BorderSide(color: Colors.white12, width: 0.5),
-        ),
+        color: Colors.black.withOpacity(0.5),
+        border: const Border(top: BorderSide(color: Colors.white10, width: 0.5)),
       ),
-      child: SafeArea(
-        top: false,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center, // 中央寄せ
-          children: <Widget>[
-            // 1. ホームボタン
-            _buildNavButton(
-              icon: Icons.home_filled,
-              view: CurrentView.home,
-            ),
-            const SizedBox(width: 24), // ボタン間の余白
-            // 2. マイページボタン
-            _buildNavButton(
-              icon: Icons.person_rounded,
-              view: CurrentView.mypage,
-            ),
-          ],
-        ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _buildNavButton(Icons.auto_fix_high, CurrentView.discovery, '発掘'),
+          _buildNavButton(Icons.home_rounded, CurrentView.home, 'ホーム'),
+          _buildNavButton(Icons.emoji_events_rounded, CurrentView.achievements, '実績'),
+        ],
       ),
     );
   }
 
-  Widget _buildNavButton({
-    required IconData icon,
-    required CurrentView view,
-  }) {
-    // 選択状態の判定
-    // CurrentView.create（投稿画面）のときは、ホームを光らせるようにしています
-    final isSelected = (currentView == view) || 
-                       (view == CurrentView.home && currentView == CurrentView.create);
-    
+  Widget _buildNavButton(IconData icon, CurrentView view, String label) {
+    final isSelected = currentView == view;
     return GestureDetector(
       onTap: () => onViewChanged(view),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 250),
-        curve: Curves.easeInOut,
-        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
-        decoration: BoxDecoration(
-          gradient: isSelected
-              ? const LinearGradient(
-                  colors: [Color(0xFF06B6D4), Color(0xFF3B82F6)],
-                )
-              : null,
-          color: isSelected ? null : Colors.white.withOpacity(0.08),
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(
-            color: isSelected ? Colors.cyan : Colors.white10,
-            width: 1,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            color: isSelected ? Colors.cyan : Colors.white38,
+            size: isSelected ? 30 : 26,
           ),
-          boxShadow: isSelected ? [
-            BoxShadow(
-              color: Colors.cyan.withOpacity(0.3),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            )
-          ] : null,
-        ),
-        child: Icon(
-          icon, 
-          size: 24, 
-          color: isSelected ? Colors.white : Colors.white70
-        ),
+          Text(
+            label,
+            style: TextStyle(
+              color: isSelected ? Colors.cyan : Colors.white38,
+              fontSize: 10,
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -7,9 +7,15 @@ class Memory {
   final String author;
   final String? authorId;
   final DateTime createdAt;
-   bool discovered;
+  bool discovered;
   final List<Comment> comments;
-  final int starRating; // 星の数（1〜5）
+  final int starRating;
+  
+  // ★ 修正：スタンプは✨1種類のみに統合
+  final List<String> guestComments; // 追加
+  int stampsCount;
+  // ★ 追加：累計発掘回数
+  int digCount;
 
   Memory({
     required this.id,
@@ -20,12 +26,15 @@ class Memory {
     required this.createdAt,
     required this.discovered,
     required this.comments,
-    this.starRating = 3, // デフォルト値
+    this.starRating = 3,
+    required this.guestComments, // 追加
+    this.stampsCount = 0,
+    this.digCount = 0,
   });
 
-  // ★ この行がエラーを解決します！
-  // 星1なら10回、星5なら50回のタップが必要になる計算です
-  int get requiredClicks => starRating * 10;
+  // ★ 重要：スタンプ数の合計で発掘に必要なタップ数が増えるロジック
+  // 基本値 (星×5) + スタンプされた数
+  int get requiredClicks => (starRating * 5) + stampsCount;
 
   Map<String, dynamic> toJson() {
     return {
@@ -38,6 +47,8 @@ class Memory {
       'discovered': discovered,
       'comments': comments.map((c) => c.toJson()).toList(),
       'starRating': starRating,
+      'stampsCount': stampsCount,
+      'digCount': digCount,
     };
   }
 
@@ -54,6 +65,9 @@ class Memory {
               ?.map((c) => Comment.fromJson(c))
               .toList() ?? [],
       starRating: json['starRating'] ?? 3,
+      guestComments: (json['guestComments'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
+      stampsCount: json['stampsCount'] ?? 0,
+      digCount: json['digCount'] ?? 0,
     );
   }
 }

@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+// 同じフォルダにある場合
 
 class CreateMemoryScreen extends StatefulWidget {
   // ★ starRatingを引数に追加するように修正
