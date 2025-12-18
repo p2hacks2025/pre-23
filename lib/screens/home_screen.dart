@@ -10,6 +10,7 @@ import 'achievements_screen.dart';
 import 'profile_screen.dart';
 import '../widgets/navigation_bar.dart';
 import '../widgets/effects.dart';
+//lib/screens/home_screen.dart
 
 enum CurrentView { discovery, home, achievements }
 

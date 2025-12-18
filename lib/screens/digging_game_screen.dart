@@ -6,7 +6,7 @@ import 'dart:ui';
 import 'dart:math';
 import '../models/memory.dart';
 import '../widgets/effects.dart';
-
+//lib/screens/digging_game_screen.dart
 class DiggingGameScreen extends StatefulWidget {
   final List<Memory> allOtherMemories;
   final Function(Memory) onDiscover;

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../screens/home_screen.dart';
-
+// lib/widgets/navigation_bar.dart
 class AppNavigationBar extends StatelessWidget {
   final CurrentView currentView;
   final Function(CurrentView) onViewChanged;
