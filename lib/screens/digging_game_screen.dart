@@ -143,7 +143,7 @@ class _DiggingGameScreenState extends State<DiggingGameScreen> with TickerProvid
                         );
                       },
                       child: Container(width: shard.size, height: shard.size, decoration: BoxDecoration(color: Colors.white.withOpacity(0.95), borderRadius: BorderRadius.circular(2))),
-                    )).toList(),
+                    )),
                 ],
               ),
             ),
@@ -159,7 +159,7 @@ class _DiggingGameScreenState extends State<DiggingGameScreen> with TickerProvid
 
   void _onFinishDigging() {
     final memory = _targetMemory!;
-    final TextEditingController _commentController = TextEditingController();
+    final TextEditingController commentController = TextEditingController();
     widget.onDiscover(memory);
     showDialog(
       context: context,
@@ -177,7 +177,7 @@ class _DiggingGameScreenState extends State<DiggingGameScreen> with TickerProvid
               const Text("この思い出に彩りを添えましょう", style: TextStyle(color: Colors.white70, fontSize: 12)),
               const SizedBox(height: 12),
               TextField(
-                controller: _commentController,
+                controller: commentController,
                 maxLength: 10,
                 style: const TextStyle(color: Colors.white),
                 decoration: InputDecoration(
@@ -197,7 +197,7 @@ class _DiggingGameScreenState extends State<DiggingGameScreen> with TickerProvid
             onPressed: () {
               setState(() {
                 memory.stampsCount++;
-                if (_commentController.text.isNotEmpty) memory.guestComments.add(_commentController.text);
+                if (commentController.text.isNotEmpty) memory.guestComments.add(commentController.text);
               });
               Navigator.pop(context); 
               _showCelebration(); 

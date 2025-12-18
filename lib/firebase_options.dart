@@ -86,4 +86,5 @@ class DefaultFirebaseOptions {
     storageBucket: 'flozendmemory.firebasestorage.app',
     measurementId: 'G-RRJKVEYWPM',
   );
+
 }
