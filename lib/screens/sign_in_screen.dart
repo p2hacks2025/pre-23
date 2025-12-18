@@ -8,7 +8,11 @@ class SignInScreen extends StatefulWidget {
   final Function(UserProfile) onSignedIn;
   final VoidCallback onCancel;
 
-  const SignInScreen({super.key, required this.onSignedIn, required this.onCancel});
+  const SignInScreen({
+    super.key, 
+    required this.onSignedIn, 
+    required this.onCancel
+  });
 
   @override
   State<SignInScreen> createState() => _SignInScreenState();
@@ -17,19 +21,21 @@ class SignInScreen extends StatefulWidget {
 class _SignInScreenState extends State<SignInScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _usernameController = TextEditingController(); // 新規登録時のみ使用
+  final _usernameController = TextEditingController();
   
   final AuthService _auth = AuthService();
   
   bool _isLoading = false;
-  bool _isRegisterMode = false; // 新規登録モードかどうか
+  // false = ログインモード, true = 新規登録モード
+  bool _isRegisterMode = false; 
   String? _errorMessage;
 
-  // メインの処理（ログインまたは登録）
+  // メインの処理
   Future<void> _submit() async {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
 
+    // 入力チェック
     if (email.isEmpty || password.isEmpty) {
       setState(() => _errorMessage = 'メールアドレスとパスワードを入力してください');
       return;
@@ -49,38 +55,54 @@ class _SignInScreenState extends State<SignInScreen> {
       UserProfile profile;
       
       if (_isRegisterMode) {
-        // --- 新規登録処理 ---
-        profile = await _auth.signUpWithEmail(
-          email: email,
-          password: password,
-          username: _usernameController.text.trim(),
-        );
+        // -------------------------
+        // 新規登録モードの場合
+        // -------------------------
+        try {
+          profile = await _auth.signUpWithEmail(
+            email: email,
+            password: password,
+            username: _usernameController.text.trim(),
+          );
+        } on FirebaseAuthException catch (e) {
+          // ★ 既に登録済みだった場合、ログインモードへ誘導
+          if (e.code == 'email-already-in-use') {
+            setState(() {
+              _isRegisterMode = false; // ログインモードへ
+              _isLoading = false;
+              _errorMessage = 'このメールアドレスは既に登録されています。\nログインボタンを押してください。';
+            });
+            return;
+          }
+          rethrow;
+        }
       } else {
-        // --- ログイン処理 ---
+        // -------------------------
+        // ログインモードの場合
+        // -------------------------
         try {
           profile = await _auth.signInWithEmail(email, password);
         } on FirebaseAuthException catch (e) {
-          // ★ここでUX分岐: ユーザーがいない場合
+          // ★ アカウントがない場合、新規登録モードへ誘導
           if (e.code == 'user-not-found' || e.code == 'invalid-credential') {
-            // 最近のFirebaseは user-not-found を invalid-credential にまとめることがあります
-            // 具体的な判別が難しい場合もあるため、一度登録モードへ誘導するフローにします
             setState(() {
-              _isRegisterMode = true; // 登録モードへ切り替え
+              _isRegisterMode = true; // 新規登録モードへ
               _isLoading = false;
-              _errorMessage = 'アカウントが見つかりません。\n新規登録しますか？ユーザー名を入力してください。';
+              _errorMessage = 'アカウントが見つかりません。\nユーザー名を入力して新規登録してください。';
             });
-            return; // ここで中断し、ユーザーに入力を促す
+            return;
           } else if (e.code == 'wrong-password') {
             throw Exception('パスワードが違います');
           } else {
-            rethrow; // その他のエラーは下でキャッチ
+            rethrow;
           }
         }
       }
 
+      // 成功時
       if (!mounted) return;
       Navigator.of(context).pop(); // ダイアログを閉じる
-      widget.onSignedIn(profile); // 完了通知
+      widget.onSignedIn(profile); // 親画面に通知
 
     } catch (e) {
       setState(() {
@@ -91,24 +113,28 @@ class _SignInScreenState extends State<SignInScreen> {
     }
   }
 
-  // エラーメッセージを日本語化して読みやすく
+  // エラーメッセージの整形
   String _cleanErrorMessage(dynamic e) {
     String msg = e.toString();
     if (msg.contains('wrong-password')) return 'パスワードが間違っています';
     if (msg.contains('invalid-email')) return 'メールアドレスの形式が正しくありません';
     if (msg.contains('weak-password')) return 'パスワードは6文字以上で設定してください';
     if (msg.contains('email-already-in-use')) return 'このメールアドレスは既に登録されています';
-    // prefixを除去
-    return msg.replaceAll('Exception:', '').replaceAll('[firebase_auth/.*] ', '');
+    if (msg.contains('user-not-found')) return 'アカウントが見つかりません';
+    if (msg.contains('configuration-not-found')) return '認証設定が無効です。\nFirebaseコンソールでメール認証をONにしてください。';
+    if (msg.contains('network-request-failed')) return '通信エラーが発生しました。接続を確認してください。';
+    
+    // 不要なプレフィックスを除去
+    return msg.replaceAll('Exception:', '').replaceAll(RegExp(r'\[firebase_auth/.*\]\s*'), '');
   }
 
   @override
   Widget build(BuildContext context) {
-    // 背景のタップでキーボードを閉じる
+    // 背景タップでキーボードを閉じる
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
       child: Material(
-        color: Colors.black54, // 背景を少し暗く
+        color: Colors.black54,
         child: Center(
           child: SingleChildScrollView(
             child: Container(
@@ -116,7 +142,7 @@ class _SignInScreenState extends State<SignInScreen> {
               margin: const EdgeInsets.all(24),
               padding: const EdgeInsets.all(32),
               decoration: BoxDecoration(
-                color: const Color(0xFF0D1B3E), // アプリのテーマカラーに合わせる
+                color: const Color(0xFF0D1B3E),
                 borderRadius: BorderRadius.circular(24),
                 border: Border.all(color: Colors.cyan.withOpacity(0.3), width: 1),
                 boxShadow: [
@@ -134,7 +160,7 @@ class _SignInScreenState extends State<SignInScreen> {
                   ),
                   const SizedBox(height: 24),
 
-                  // エラー表示
+                  // エラー表示エリア
                   if (_errorMessage != null) ...[
                     Container(
                       padding: const EdgeInsets.all(12),
@@ -152,7 +178,7 @@ class _SignInScreenState extends State<SignInScreen> {
                     const SizedBox(height: 16),
                   ],
 
-                  // メール入力
+                  // メールアドレス入力
                   _buildTextField(
                     controller: _emailController,
                     label: 'メールアドレス',
@@ -169,7 +195,7 @@ class _SignInScreenState extends State<SignInScreen> {
                     obscureText: true,
                   ),
                   
-                  // ★新規登録モードの時だけユーザー名入力欄が出現
+                  // 新規登録時のみユーザー名を表示
                   if (_isRegisterMode) ...[
                     const SizedBox(height: 16),
                     _buildTextField(
@@ -181,6 +207,7 @@ class _SignInScreenState extends State<SignInScreen> {
 
                   const SizedBox(height: 24),
 
+                  // 実行ボタン
                   if (_isLoading)
                     const Center(child: CircularProgressIndicator(color: Colors.cyan))
                   else
@@ -200,6 +227,23 @@ class _SignInScreenState extends State<SignInScreen> {
                     ),
 
                   const SizedBox(height: 16),
+
+                  // ★ 手動切り替えボタン
+                  TextButton(
+                    onPressed: () {
+                      setState(() {
+                        _isRegisterMode = !_isRegisterMode;
+                        _errorMessage = null;
+                      });
+                    },
+                    child: Text(
+                      _isRegisterMode 
+                        ? '既にアカウントをお持ちの方はログイン' 
+                        : 'アカウントをお持ちでない方は新規登録',
+                      style: const TextStyle(color: Colors.cyanAccent, fontSize: 12),
+                    ),
+                  ),
+
                   TextButton(
                     onPressed: widget.onCancel,
                     child: const Text('キャンセル', style: TextStyle(color: Colors.white54)),

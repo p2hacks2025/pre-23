@@ -105,7 +105,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           initialAuthor: _userProfile!.username,
           onCancel: () => Navigator.pop(ctx),
           onSubmit: (photoPath, text, author, starRating) async {
-            // ★ 修正: 非同期処理の前にNavigatorやMessengerを確保しておく（安全策）
+            // 非同期処理の前にNavigatorやMessengerを確保
             final navigator = Navigator.of(ctx);
             final messenger = ScaffoldMessenger.of(ctx);
 
@@ -172,7 +172,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       margin: const EdgeInsets.only(bottom: 8),
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       decoration: BoxDecoration(
-                        // ★ 修正: withOpacity -> withValues
+                        // withOpacity -> withValues (警告対応済み)
                         color: Colors.white.withValues(alpha: 0.05),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(color: Colors.cyan.withValues(alpha: 0.1)),
@@ -188,6 +188,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         ],
       ),
     );
+  }
+
+  // ★ SVG対策: URLを修正するヘルパーメソッド
+  String _sanitizeUrl(String url) {
+    if (url.contains('dicebear.com') && url.contains('svg')) {
+      return url.replaceAll('svg', 'png');
+    }
+    return url;
   }
 
   @override
@@ -206,7 +214,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 radius: 16, 
                 backgroundColor: Colors.white24,
                 backgroundImage: _userProfile!.avatar.startsWith('http') 
-                    ? NetworkImage(_userProfile!.avatar) 
+                    // ★ SVG対策: ここでURLをサニタイズ
+                    ? NetworkImage(_sanitizeUrl(_userProfile!.avatar)) 
                     : null,
                 child: _userProfile!.avatar.isEmpty ? const Icon(Icons.person, size: 20) : null,
               )
@@ -265,7 +274,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // ★ 修正: withOpacity -> withValues
                 Icon(Icons.ac_unit, size: 64, color: Colors.cyan.withValues(alpha: 0.3)),
                 const SizedBox(height: 16),
                 const Text("まだ記憶を封印していません", style: TextStyle(color: Colors.white38)),
@@ -289,7 +297,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   decoration: IceEffects.glassStyle.copyWith(
                     boxShadow: [
                       BoxShadow(
-                        // ★ 修正: withOpacity -> withValues
                         color: Colors.cyan.withValues(alpha: 0.1 + (_shimmerController.value * 0.15)),
                         blurRadius: 10 + (_shimmerController.value * 10),
                         spreadRadius: 1,
@@ -308,6 +315,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       child: ClipRRect(
                         borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
                         child: Image(
+                          // ★ SVG対策: ヘルパーメソッド経由で呼び出し
                           image: _getImage(memory.photo), 
                           fit: BoxFit.cover, 
                           width: double.infinity,
@@ -383,7 +391,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   ImageProvider _getImage(String path) {
     if (path.isEmpty) return const NetworkImage('https://via.placeholder.com/150');
-    if (path.startsWith('http') || kIsWeb) return NetworkImage(path);
-    return FileImage(File(path));
+    
+    // ★ SVG対策: ここでもURLをサニタイズ
+    String safePath = _sanitizeUrl(path);
+
+    if (safePath.startsWith('http') || kIsWeb) return NetworkImage(safePath);
+    return FileImage(File(safePath));
   }
 }
