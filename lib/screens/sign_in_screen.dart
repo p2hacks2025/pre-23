@@ -288,6 +288,7 @@ class _SignInScreenState extends State<SignInScreen> {
     );
   }
 
+
   @override
   void dispose() {
     _emailController.dispose();
