@@ -1,30 +1,71 @@
 import 'dart:io';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import '../models/memory.dart';
 
 class IceEffects {
+  // ★ 画像リストを一括管理
+  static const List<String> iceImages = [
+    'assets/icefilter1.png',
+    'assets/icefilter2.jpg',
+    'assets/icefilter3.jpg',
+  ];
+
+  // ★ 共通のガラススタイル
   static BoxDecoration glassStyle = BoxDecoration(
-    color: const Color(0xFF1E293B).withOpacity(0.9),
     borderRadius: BorderRadius.circular(16),
-    border: Border.all(color: Colors.white10, width: 0.5),
+    border: Border.all(color: Colors.white.withOpacity(0.2), width: 0.5),
+    image: DecorationImage(
+      image: AssetImage(iceImages[0]), // デフォルト
+      fit: BoxFit.cover,
+      opacity: 0.25,
+      colorFilter: const ColorFilter.mode(
+        Color(0xFF1E293B), 
+        BlendMode.multiply,
+      ),
+    ),
+    color: const Color(0xFF1E293B),
   );
+
+  // ★ 指定したindexの氷画像デコレーションを返す関数（エラー回避付き）
+  static DecorationImage getIceDecoration(int index, {double opacity = 0.6}) {
+    return DecorationImage(
+      image: AssetImage(iceImages[index % iceImages.length]),
+      fit: BoxFit.cover,
+      opacity: opacity,
+      onError: (exception, stackTrace) => debugPrint('Missing: ${iceImages[index % iceImages.length]}'),
+    );
+  }
 
   static void showIceDialog({required BuildContext context, required Widget child}) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF0D1B3E).withOpacity(0.95),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        content: SizedBox(
+        backgroundColor: Colors.transparent,
+        contentPadding: EdgeInsets.zero,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20),
+        content: Container(
           width: MediaQuery.of(context).size.width * 0.8,
-          child: SingleChildScrollView(child: child),
+          decoration: glassStyle.copyWith(
+            borderRadius: BorderRadius.circular(24),
+            color: const Color(0xFF0D1B3E).withOpacity(0.9),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(24),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: SingleChildScrollView(child: child),
+              ),
+            ),
+          ),
         ),
       ),
     );
   }
 
-  // スタンプカウンター（✨と数字のみを表示）
   static Widget buildStampCounter(String emoji, int count) {
     if (count <= 0) return const SizedBox.shrink();
     return Container(
@@ -46,7 +87,6 @@ class IceEffects {
     );
   }
 
-  // ★修正：✨1種類にするため、onReaction を引数なしの VoidCallback? に戻し、文字を削除
   static Widget memoryDetailContent(Memory memory, {bool showReactions = false, VoidCallback? onReaction}) {
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -77,9 +117,7 @@ class IceEffects {
         ),
         if (showReactions) ...[
           const Divider(color: Colors.white10, height: 30),
-          const Center(
-            child: Text("想いを送る", style: TextStyle(color: Colors.cyan, fontSize: 12, fontWeight: FontWeight.bold)),
-          ),
+          const Center(child: Text("想いを送る", style: TextStyle(color: Colors.cyan, fontSize: 12, fontWeight: FontWeight.bold))),
           const SizedBox(height: 15),
           Center(
             child: InkWell(
@@ -87,11 +125,8 @@ class IceEffects {
               borderRadius: BorderRadius.circular(50),
               child: Container(
                 padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.white.withOpacity(0.05),
-                ),
-                child: const Text("✨", style: TextStyle(fontSize: 45)), // ★文字なし、✨のみ
+                decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withOpacity(0.05)),
+                child: const Text("✨", style: TextStyle(fontSize: 45)),
               ),
             ),
           ),
