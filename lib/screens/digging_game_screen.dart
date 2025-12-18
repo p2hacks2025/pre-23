@@ -6,7 +6,7 @@ import 'dart:ui';
 import 'dart:math';
 import '../models/memory.dart';
 import '../widgets/effects.dart';
-//lib/screens/digging_game_screen.dart
+
 class DiggingGameScreen extends StatefulWidget {
   final List<Memory> allOtherMemories;
   final Function(Memory) onDiscover;
@@ -50,10 +50,10 @@ class _DiggingGameScreenState extends State<DiggingGameScreen> with TickerProvid
 
   void _startShatterEffect() {
     final random = Random();
-    _shards = List.generate(15, (index) => IceShard(
+    _shards = List.generate(20, (index) => IceShard( // 破片を少し増やしました
       angle: random.nextDouble() * pi * 2,
-      distance: 100.0 + random.nextDouble() * 150.0,
-      size: 10.0 + random.nextDouble() * 30.0,
+      distance: 100.0 + random.nextDouble() * 200.0,
+      size: 8.0 + random.nextDouble() * 25.0,
     ));
     HapticFeedback.heavyImpact();
     _shatterController.forward(from: 0.0).then((_) => _onFinishDigging());
@@ -125,7 +125,7 @@ class _DiggingGameScreenState extends State<DiggingGameScreen> with TickerProvid
                               border: Border.all(color: Colors.white.withOpacity(0.5), width: 2),
                             ),
                             child: CustomPaint(
-                              painter: IceCrackPainter(progress: progress),
+                              painter: IceCrackPainter(progress: progress), // 強化されたヒビ
                               child: const Icon(Icons.ac_unit, size: 80, color: Colors.white54),
                             ),
                           ),
@@ -138,11 +138,11 @@ class _DiggingGameScreenState extends State<DiggingGameScreen> with TickerProvid
                       builder: (context, child) {
                         double t = _shatterController.value;
                         return Transform.translate(
-                          offset: Offset(cos(shard.angle) * shard.distance * t, sin(shard.angle) * shard.distance * t + (200 * t * t)),
-                          child: Transform.rotate(angle: t * pi * 2, child: Opacity(opacity: 1.0 - t, child: child)),
+                          offset: Offset(cos(shard.angle) * shard.distance * t, sin(shard.angle) * shard.distance * t + (300 * t * t)),
+                          child: Transform.rotate(angle: t * pi * 3, child: Opacity(opacity: 1.0 - t, child: child)),
                         );
                       },
-                      child: Container(width: shard.size, height: shard.size, decoration: BoxDecoration(color: Colors.white.withOpacity(0.9), borderRadius: BorderRadius.circular(2))),
+                      child: Container(width: shard.size, height: shard.size, decoration: BoxDecoration(color: Colors.white.withOpacity(0.95), borderRadius: BorderRadius.circular(2))),
                     )).toList(),
                 ],
               ),
@@ -198,10 +198,9 @@ class _DiggingGameScreenState extends State<DiggingGameScreen> with TickerProvid
               setState(() {
                 memory.stampsCount++;
                 if (_commentController.text.isNotEmpty) memory.guestComments.add(_commentController.text);
-                _targetMemory = null; 
-                _shatterController.reset();
               });
               Navigator.pop(context); 
+              _showCelebration(); 
             },
             icon: const Icon(Icons.auto_awesome),
             label: const Text("キラキラを送って完了"),
@@ -210,6 +209,22 @@ class _DiggingGameScreenState extends State<DiggingGameScreen> with TickerProvid
         ],
       ),
     );
+  }
+
+  void _showCelebration() {
+    late OverlayEntry overlayEntry;
+    overlayEntry = OverlayEntry(
+      builder: (context) => SuccessSparkleOverlay(
+        onFinished: () {
+          overlayEntry.remove();
+          setState(() {
+            _targetMemory = null; 
+            _shatterController.reset();
+          });
+        },
+      ),
+    );
+    Overlay.of(context).insert(overlayEntry);
   }
 
   Widget _buildMemoryCard(Memory memory, int index) {
@@ -276,27 +291,148 @@ class _DiggingGameScreenState extends State<DiggingGameScreen> with TickerProvid
   }
 }
 
+// ★ キラキラ演出ウィジェット
+class SuccessSparkleOverlay extends StatefulWidget {
+  final VoidCallback onFinished;
+  const SuccessSparkleOverlay({super.key, required this.onFinished});
+
+  @override
+  State<SuccessSparkleOverlay> createState() => _SuccessSparkleOverlayState();
+}
+
+class _SuccessSparkleOverlayState extends State<SuccessSparkleOverlay> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  final List<SparklePoint> _sparkles = List.generate(45, (index) => SparklePoint());
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(vsync: this, duration: const Duration(seconds: 3))..forward();
+    _controller.addStatusListener((status) {
+      if (status == AnimationStatus.completed) widget.onFinished();
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: Stack(
+        children: [
+          AnimatedBuilder(
+            animation: _controller,
+            builder: (context, _) => Container(color: Colors.black.withOpacity((1.0 - _controller.value).clamp(0, 0.7))),
+          ),
+          ..._sparkles.map((s) => AnimatedBuilder(
+            animation: _controller,
+            builder: (context, _) {
+              final t = _controller.value;
+              return Positioned(
+                left: s.x * MediaQuery.of(context).size.width,
+                top: (s.y - (t * s.speed)) * MediaQuery.of(context).size.height,
+                child: Opacity(
+                  opacity: (1.0 - t).clamp(0, 1),
+                  child: Icon(Icons.auto_awesome, color: s.color, size: s.size),
+                ),
+              );
+            },
+          )),
+          Center(
+            child: FadeTransition(
+              opacity: CurvedAnimation(parent: _controller, curve: const Interval(0.0, 0.2, curve: Curves.easeIn)),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                decoration: BoxDecoration(
+                  color: Colors.cyan.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(40),
+                  border: Border.all(color: Colors.cyanAccent.withOpacity(0.5), width: 2),
+                ),
+                child: const Text("想いを届けました ✨",
+                    style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold, decoration: TextDecoration.none)),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class IceShard {
   final double angle, distance, size;
   IceShard({required this.angle, required this.distance, required this.size});
 }
 
+// ★ 強化されたヒビ割れペインター
 class IceCrackPainter extends CustomPainter {
   final double progress;
   IceCrackPainter({required this.progress});
+
   @override
   void paint(Canvas canvas, Size size) {
-    if (progress < 0.2) return;
-    final paint = Paint()..color = Colors.white.withOpacity(0.8)..strokeWidth = 2.0..style = PaintingStyle.stroke;
-    final path = Path();
-    int crackLines = (progress * 12).toInt();
-    for (int i = 0; i < crackLines; i++) {
-      double startX = size.width / 2, startY = size.height / 2;
-      path.moveTo(startX, startY);
-      path.lineTo(startX + cos(i * 1.5) * (size.width / 2 * progress * 1.2), startY + sin(i * 2.0) * (size.height / 2 * progress * 1.2));
+    if (progress < 0.1) return;
+
+    final paint = Paint()
+      ..color = Colors.white.withOpacity(0.8)
+      ..strokeWidth = 1.5
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+
+    final glowPaint = Paint()
+      ..color = Colors.white.withOpacity(0.2)
+      ..strokeWidth = 4.0
+      ..style = PaintingStyle.stroke
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2);
+
+    final random = Random(42); // シード固定で同じヒビパターンを維持
+    final centerX = size.width / 2;
+    final centerY = size.height / 2;
+
+    int mainCracks = (progress * 15).toInt().clamp(3, 15);
+
+    for (int i = 0; i < mainCracks; i++) {
+      final path = Path();
+      path.moveTo(centerX, centerY);
+
+      double currentX = centerX;
+      double currentY = centerY;
+      double angle = (i * (2 * pi / mainCracks)) + (random.nextDouble() * 0.5);
+      
+      // ヒビの長さ
+      double maxLength = (size.width / 1.5) * progress;
+      int segments = 5;
+
+      for (int j = 0; j < segments; j++) {
+        double step = (maxLength / segments);
+        currentX += cos(angle) * step + (random.nextDouble() - 0.5) * 20;
+        currentY += sin(angle) * step + (random.nextDouble() - 0.5) * 20;
+        path.lineTo(currentX, currentY);
+
+        // 枝分かれ（progressが進んでいる場合のみ）
+        if (progress > 0.4 && random.nextDouble() > 0.6) {
+          _drawBranch(canvas, paint, currentX, currentY, angle + 0.8, progress * 30, random);
+        }
+      }
+      canvas.drawPath(path, glowPaint);
+      canvas.drawPath(path, paint);
     }
-    canvas.drawPath(path, paint);
   }
+
+  void _drawBranch(Canvas canvas, Paint paint, double x, double y, double angle, double length, Random random) {
+    final branchPath = Path();
+    branchPath.moveTo(x, y);
+    double bx = x + cos(angle) * length;
+    double by = y + sin(angle) * length;
+    branchPath.lineTo(bx, by);
+    canvas.drawPath(branchPath, paint);
+  }
+
   @override
   bool shouldRepaint(IceCrackPainter oldDelegate) => oldDelegate.progress != progress;
 }
