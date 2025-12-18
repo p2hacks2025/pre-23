@@ -1,75 +1,94 @@
-// lib/services/auth_service.dart (Firebase版)
+// lib/services/auth_service.dart
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-// import '../models/game.dart'; // ← これだと古いUserProfileを見に行くので削除
-import '../models/user_profile.dart'; // ★★★ これを追加！
+import '../models/user_profile.dart';
 
-// UserProfileの初期値や、Firestoreへのアクセスを管理
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   
-  // ユーザープロファイルコレクションの参照
   static const String _userProfilesCollection = 'userProfiles';
 
-  // 1. 現在の認証済みユーザーの取得
+  // 1. 現在のユーザー取得
   Future<UserProfile> getCurrentUser() async {
     final user = _auth.currentUser;
     if (user == null) {
       return _createGuestProfile(); 
     }
-    
-    final doc = await _db.collection(_userProfilesCollection).doc(user.uid).get();
-    
-    if (doc.exists) {
-      // これで user_profile.dart の fromJson が呼ばれます
-      return UserProfile.fromJson(doc.data()!);
-    }
-    
-    return await _createOrUpdateProfile(user.uid, user.isAnonymous ? '匿名ユーザー' : 'ユーザー');
+    return await _fetchProfileFromFirestore(user.uid);
   }
 
-  // 2. 匿名サインイン
+  // 2. メールとパスワードでログイン
+  Future<UserProfile> signInWithEmail(String email, String password) async {
+    final credential = await _auth.signInWithEmailAndPassword(
+      email: email, 
+      password: password
+    );
+    return await _fetchProfileFromFirestore(credential.user!.uid);
+  }
+
+  // 3. 新規登録（メール、パスワード、ユーザー名）
+  Future<UserProfile> signUpWithEmail({
+    required String email, 
+    required String password, 
+    required String username
+  }) async {
+    // Firebase Authにユーザー作成
+    final credential = await _auth.createUserWithEmailAndPassword(
+      email: email, 
+      password: password
+    );
+    
+    // Firestoreにプロフィール作成
+    return await _createOrUpdateProfile(
+      credential.user!.uid, 
+      username,
+      bio: '凍土に降り立った新たな探索者'
+    );
+  }
+
+  // 4. 匿名ログイン（予備として残す場合）
   Future<UserProfile> signInAnonymously() async {
     final userCredential = await _auth.signInAnonymously();
-    final uid = userCredential.user!.uid;
-    return await _createOrUpdateProfile(uid, '匿名ユーザー');
-  }
-  
-  // 3. ユーザー名でのサインイン/プロフィール更新
-  Future<UserProfile> signInWithUsername(String username) async {
-    User? user = _auth.currentUser;
-    if (user == null) {
-      final userCredential = await _auth.signInAnonymously();
-      user = userCredential.user;
-    }
-    
-    final updatedProfile = await _createOrUpdateProfile(user!.uid, username);
-    return updatedProfile;
+    return await _createOrUpdateProfile(userCredential.user!.uid, '匿名ユーザー');
   }
 
-  // 4. サインアウト
+  // 5. サインアウト
   Future<void> signOut() async {
     await _auth.signOut();
   }
+
+  // --- 内部ヘルパーメソッド ---
+
+  Future<UserProfile> _fetchProfileFromFirestore(String uid) async {
+    final doc = await _db.collection(_userProfilesCollection).doc(uid).get();
+    if (doc.exists) {
+      return UserProfile.fromJson(doc.data()!);
+    }
+    // AuthにはいるがFirestoreにない場合（稀なケース）はプロフィール作成へ
+    return await _createOrUpdateProfile(uid, 'ユーザー');
+  }
   
-  // 5. Firestoreにプロフィールを作成/更新するヘルパー
   Future<UserProfile> _createOrUpdateProfile(String uid, String username, {String? avatar, String? bio}) async {
     final profileData = {
       'id': uid,
       'username': username,
-      'avatar': avatar ?? '', 
+      'avatar': avatar ?? 'https://api.dicebear.com/7.x/avataaars/png?seed=$uid', // デフォルトアイコン
       'bio': bio ?? '',
     };
     
+    // merge: true にすることで既存データを消さずに更新
     await _db.collection(_userProfilesCollection).doc(uid).set(profileData, SetOptions(merge: true));
     
-    final doc = await _db.collection(_userProfilesCollection).doc(uid).get();
-    return UserProfile.fromJson(doc.data()!);
+    return UserProfile(
+      id: uid, 
+      username: username, 
+      avatar: profileData['avatar']!, 
+      bio: profileData['bio']!
+    );
   }
 
-  // ゲストプロフィール
   UserProfile _createGuestProfile() {
     return UserProfile(id: 'guest', username: 'ゲスト', avatar: '', bio: '');
   }

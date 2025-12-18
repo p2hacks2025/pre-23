@@ -1,25 +1,23 @@
 // lib/main.dart
 
-// 必要なインポート
 import 'package:flutter/material.dart';
-import 'package:firebase_core/firebase_core.dart'; // 💡 このインポートが必要です
-import 'firebase_options.dart'; // 💡 firebase_options.dartをインポート
-import 'screens/home_screen.dart'; 
-// ... 他のインポート
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // Authを使う
+import 'firebase_options.dart';
+import 'screens/home_screen.dart';
+import 'screens/top_screen.dart';
 
-// main関数を async にし、Firebaseを初期化します
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  try {
-    // 1. Firebaseの初期化
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
-  } catch (e) {
-    // 2. 初期化エラーのデバッグ出力
-    // このエラーが出ている場合は、WindowsのFirebase設定が不完全である可能性が高い
-    debugPrint('🔥 Firebase initialization failed: $e');
+  if (Firebase.apps.isEmpty) {
+    try {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+    } catch (e) {
+      debugPrint('🔥 Firebase initialization failed: $e');
+    }
   }
 
   runApp(const MyApp());
@@ -31,8 +29,33 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      // ...
-      home: const HomeScreen(),
+      title: 'Frozen Memory',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData.dark().copyWith(
+        scaffoldBackgroundColor: const Color(0xFF0D1B3E),
+        colorScheme: const ColorScheme.dark(
+          primary: Colors.cyan,
+          secondary: Colors.cyanAccent,
+        ),
+      ),
+      // ★ ここが重要：StreamBuilderでログイン状態を監視する
+      home: StreamBuilder<User?>(
+        stream: FirebaseAuth.instance.authStateChanges(),
+        builder: (context, snapshot) {
+          // 1. 読み込み中ならローディング画面（真っ黒でOK）
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Scaffold(body: Center(child: CircularProgressIndicator()));
+          }
+
+          // 2. ユーザーが存在する（ログイン済み）なら -> ホーム画面へ
+          if (snapshot.hasData) {
+            return const HomeScreen();
+          }
+
+          // 3. ユーザーがいない（未ログイン）なら -> トップ画面へ
+          return const TopScreen();
+        },
+      ),
     );
   }
 }

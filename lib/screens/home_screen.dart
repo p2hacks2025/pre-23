@@ -1,56 +1,67 @@
+// lib/screens/home_screen.dart
+
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
-import 'package:image_picker/image_picker.dart';
+import 'package:flutter/foundation.dart'; // kIsWeb用
 import '../models/memory.dart';
 import '../models/user_profile.dart';
-import '../services/demo_data.dart';
+import '../services/api_service.dart';
+import '../services/auth_service.dart';
 import 'digging_game_screen.dart';
 import 'achievements_screen.dart';
 import 'profile_screen.dart';
+import 'create_memory_screen.dart';
 import '../widgets/navigation_bar.dart';
 import '../widgets/effects.dart';
-//lib/screens/home_screen.dart
 
 enum CurrentView { discovery, home, achievements }
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
+  final ApiService _api = ApiService();
+  final AuthService _auth = AuthService();
+
   CurrentView _currentView = CurrentView.home;
+  UserProfile? _userProfile;
   bool _isLoading = true;
+  
   late PageController _pageController;
-  
-  // ★ キラキラ光るアニメーション用のコントローラー
   late AnimationController _shimmerController;
-  
-  UserProfile _userProfile = UserProfile(
-    id: 'user_123', 
-    username: '探索者', 
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Felix', 
-    bio: '凍土に眠る記憶を探しています'
-  );
-  
-  List<Memory> _memories = [];
-  final _picker = ImagePicker();
-  final _createController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _pageController = PageController(initialPage: 1);
     
-    // ★ グロー効果（呼吸するように光る）のアニメーション設定
     _shimmerController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 2),
     )..repeat(reverse: true);
 
-    _loadData();
+    _initUser();
+  }
+
+  Future<void> _initUser() async {
+    try {
+      final profile = await _auth.getCurrentUser();
+      if (mounted) {
+        setState(() {
+          _userProfile = profile;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint("ユーザー読み込みエラー: $e");
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
   }
 
   @override
@@ -60,18 +71,66 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     super.dispose();
   }
 
-  Future<void> _loadData() async {
-    await Future.delayed(const Duration(milliseconds: 500));
-    setState(() {
-      _memories = DemoData.getMemories();
-      _isLoading = false;
-    });
+  void _openProfile() {
+    if (_userProfile == null) return;
+    
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => ProfileScreen(
+        profile: _userProfile!,
+        onClose: () => Navigator.pop(context),
+        onSave: (updated) {
+          setState(() => _userProfile = updated);
+        },
+      ),
+    );
   }
 
-  // --- 投稿・プロフィール・詳細表示 ---
-  
+  void _showCreateModal() {
+    if (_userProfile == null) return;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        height: MediaQuery.of(ctx).size.height * 0.9,
+        decoration: const BoxDecoration(
+          color: Color(0xFF0D1B3E),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: CreateMemoryScreen(
+          initialAuthor: _userProfile!.username,
+          onCancel: () => Navigator.pop(ctx),
+          onSubmit: (photoPath, text, author, starRating) async {
+            // ★ 修正: 非同期処理の前にNavigatorやMessengerを確保しておく（安全策）
+            final navigator = Navigator.of(ctx);
+            final messenger = ScaffoldMessenger.of(ctx);
+
+            await _api.createMemory(
+              localPhotoPath: photoPath,
+              text: text,
+              authorName: _userProfile!.username,
+              authorId: _userProfile!.id,
+              starRating: starRating,
+            );
+            
+            // 画面がまだ存在しているかチェックしてから閉じる
+            if (navigator.canPop()) {
+              navigator.pop();
+              messenger.showSnackBar(
+                const SnackBar(content: Text('記憶を凍土に封印しました...')),
+              );
+            }
+          },
+        ),
+      ),
+    );
+  }
+
   void _showMemoryDetail(Memory memory) {
-    // 詳細を開いたときにキラキラが少し強調される演出
     IceEffects.showIceDialog(
       context: context, 
       child: Column(
@@ -80,8 +139,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           IceEffects.memoryDetailContent(memory),
           const SizedBox(height: 20),
           const Divider(color: Colors.white24),
-          const SizedBox(height: 10),
-          Row(
+           Row(
             children: [
               const Icon(Icons.stars, color: Colors.amber, size: 20),
               const SizedBox(width: 8),
@@ -98,44 +156,32 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ),
           const SizedBox(height: 12),
           if (memory.guestComments.isEmpty)
-            const Padding(
+             const Padding(
               padding: EdgeInsets.symmetric(vertical: 20),
               child: Text("まだ言葉は寄せられていません", style: TextStyle(color: Colors.white38, fontSize: 12)),
             )
           else
-            ConstrainedBox(
+             ConstrainedBox(
               constraints: const BoxConstraints(maxHeight: 200),
               child: ListView.builder(
                 shrinkWrap: true,
                 padding: EdgeInsets.zero,
                 itemCount: memory.guestComments.length,
                 itemBuilder: (context, index) {
-                  return TweenAnimationBuilder<double>(
-                    tween: Tween(begin: 0.0, end: 1.0),
-                    duration: Duration(milliseconds: 400 + (index * 100)),
-                    builder: (context, value, child) {
-                      return Opacity(
-                        opacity: value,
-                        child: Transform.translate(
-                          offset: Offset(0, 20 * (1 - value)),
-                          child: child,
-                        ),
-                      );
-                    },
-                    child: Container(
+                   return Container(
                       margin: const EdgeInsets.only(bottom: 8),
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.05),
+                        // ★ 修正: withOpacity -> withValues
+                        color: Colors.white.withValues(alpha: 0.05),
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.cyan.withOpacity(0.1)),
+                        border: Border.all(color: Colors.cyan.withValues(alpha: 0.1)),
                       ),
                       child: Text(
                         "✨ ${memory.guestComments[index]}",
                         style: const TextStyle(color: Colors.white, fontSize: 13),
                       ),
-                    ),
-                  );
+                    );
                 },
               ),
             ),
@@ -144,22 +190,32 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-  // --- メインビルド ---
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        title: const Text('Flozend Memory', style: TextStyle(color: Colors.white)),
+        title: const Text('Frozen Memory', style: TextStyle(color: Colors.white, fontFamily: 'Serif', fontWeight: FontWeight.bold)),
         backgroundColor: Colors.transparent,
+        automaticallyImplyLeading: false,
         actions: [
-          IconButton(onPressed: _openProfile, icon: CircleAvatar(radius: 16, backgroundImage: NetworkImage(_userProfile.avatar))),
+          if (_userProfile != null)
+            IconButton(
+              onPressed: _openProfile, 
+              icon: CircleAvatar(
+                radius: 16, 
+                backgroundColor: Colors.white24,
+                backgroundImage: _userProfile!.avatar.startsWith('http') 
+                    ? NetworkImage(_userProfile!.avatar) 
+                    : null,
+                child: _userProfile!.avatar.isEmpty ? const Icon(Icons.person, size: 20) : null,
+              )
+            ),
           const SizedBox(width: 8),
         ],
       ),
-      body: _isLoading 
-        ? const Center(child: CircularProgressIndicator()) 
+      body: _isLoading || _userProfile == null
+        ? const Center(child: CircularProgressIndicator(color: Colors.cyan)) 
         : Column(
             children: [
               Expanded(
@@ -169,9 +225,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     setState(() => _currentView = CurrentView.values[index]);
                   },
                   children: [
-                    _buildDiscoveryView(),
-                    _buildHomeView(),
-                    _buildAchievementsView(),
+                    _buildDiscoveryView(),     
+                    _buildHomeView(),          
+                    _buildAchievementsView(),  
                   ],
                 ),
               ),
@@ -185,154 +241,148 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             ],
           ),
       floatingActionButton: _currentView == CurrentView.home 
-        ? FloatingActionButton(onPressed: _showCreateModal, backgroundColor: Colors.cyan, child: const Icon(Icons.add)) 
+        ? FloatingActionButton(
+            onPressed: _showCreateModal, 
+            backgroundColor: Colors.cyan, 
+            child: const Icon(Icons.add, color: Colors.black)
+          ) 
         : null,
     );
   }
 
   Widget _buildHomeView() {
-    final discoveredMems = _memories.where((m) => m.authorId != _userProfile.id && m.discovered).toList();
-    if (discoveredMems.isEmpty) return const Center(child: Text("発掘済みの思い出がありません", style: TextStyle(color: Colors.white38)));
+    return StreamBuilder<List<Memory>>(
+      stream: _api.watchMyMemories(_userProfile!.id),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator(color: Colors.cyan));
+        }
+        
+        final myMemories = snapshot.data ?? [];
 
-    return GridView.builder(
-      padding: const EdgeInsets.all(16),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2, mainAxisSpacing: 16, crossAxisSpacing: 16, childAspectRatio: 0.75,
-      ),
-      itemCount: discoveredMems.length,
-      itemBuilder: (context, index) {
-        final memory = discoveredMems[index];
-        return AnimatedBuilder(
-          animation: _shimmerController,
-          builder: (context, child) {
-            return Container(
-              decoration: IceEffects.glassStyle.copyWith(
-                // ★ カードの周りが呼吸するように光るエフェクト
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.cyan.withOpacity(0.1 + (_shimmerController.value * 0.15)),
-                    blurRadius: 10 + (_shimmerController.value * 10),
-                    spreadRadius: 1,
-                  )
-                ],
-              ),
-              child: child,
-            );
-          },
-          child: GestureDetector(
-            onTap: () => _showMemoryDetail(memory),
+        if (myMemories.isEmpty) {
+          return Center(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Expanded(
-                  child: ClipRRect(
-                    borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                    child: Image(image: _getImage(memory.photo), fit: BoxFit.cover, width: double.infinity),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(memory.text, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                      if (memory.guestComments.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: Text("💬 ${memory.guestComments.last}", style: const TextStyle(color: Colors.cyan, fontSize: 11), maxLines: 1),
-                        ),
-                      const SizedBox(height: 8),
-                      // キラキラ数表示
-                      Row(
-                        children: [
-                          const Text("✨", style: TextStyle(fontSize: 12)),
-                          const SizedBox(width: 4),
-                          Text("${memory.stampsCount}", style: const TextStyle(color: Colors.white70, fontSize: 12)),
-                        ],
-                      ),
+                // ★ 修正: withOpacity -> withValues
+                Icon(Icons.ac_unit, size: 64, color: Colors.cyan.withValues(alpha: 0.3)),
+                const SizedBox(height: 16),
+                const Text("まだ記憶を封印していません", style: TextStyle(color: Colors.white38)),
+              ],
+            )
+          );
+        }
+
+        return GridView.builder(
+          padding: const EdgeInsets.all(16),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2, mainAxisSpacing: 16, crossAxisSpacing: 16, childAspectRatio: 0.75,
+          ),
+          itemCount: myMemories.length,
+          itemBuilder: (context, index) {
+            final memory = myMemories[index];
+            return AnimatedBuilder(
+              animation: _shimmerController,
+              builder: (context, child) {
+                return Container(
+                  decoration: IceEffects.glassStyle.copyWith(
+                    boxShadow: [
+                      BoxShadow(
+                        // ★ 修正: withOpacity -> withValues
+                        color: Colors.cyan.withValues(alpha: 0.1 + (_shimmerController.value * 0.15)),
+                        blurRadius: 10 + (_shimmerController.value * 10),
+                        spreadRadius: 1,
+                      )
                     ],
                   ),
+                  child: child,
+                );
+              },
+              child: GestureDetector(
+                onTap: () => _showMemoryDetail(memory),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: ClipRRect(
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                        child: Image(
+                          image: _getImage(memory.photo), 
+                          fit: BoxFit.cover, 
+                          width: double.infinity,
+                          errorBuilder: (c, o, s) => Container(color: Colors.grey[900], child: const Icon(Icons.broken_image, color: Colors.white24)),
+                        ),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(memory.text, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                          
+                          const SizedBox(height: 8),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  const Text("✨", style: TextStyle(fontSize: 12)),
+                                  const SizedBox(width: 4),
+                                  Text("${memory.stampsCount}", style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         );
       },
     );
   }
 
-  // --- 他のビューとユーティリティ (変更なし) ---
-  
-  Widget _buildDiscoveryView() => DiggingGameScreen(
-    allOtherMemories: _memories.where((m) => m.authorId != _userProfile.id).toList(),
-    onDiscover: (m) => setState(() => m.discovered = true),
-  );
+  Widget _buildDiscoveryView() {
+    return StreamBuilder<List<Memory>>(
+      stream: _api.watchOthersMemories(_userProfile!.id),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+           return const Center(child: CircularProgressIndicator(color: Colors.cyan));
+        }
+        final otherMemories = snapshot.data ?? [];
+        
+        if (otherMemories.isEmpty) {
+           return const Center(child: Text("発掘できる記憶がまだありません", style: TextStyle(color: Colors.white38)));
+        }
 
-  Widget _buildAchievementsView() => const AchievementsScreen();
-
-  void _openProfile() {
-    showModalBottomSheet(
-      context: context, isScrollControlled: true, backgroundColor: Colors.transparent,
-      builder: (context) => ProfileScreen(
-        profile: _userProfile,
-        onSave: (newProfile) => setState(() => _userProfile = newProfile),
-        onClose: () => Navigator.pop(context),
-        onRequestSignIn: () {},
-      ),
+        return DiggingGameScreen(
+          allOtherMemories: otherMemories,
+          onDiscover: (memory) {
+            _api.unlockMemory(memory.id, _userProfile!.id);
+            _api.sendStamp(memory.id); 
+          },
+        );
+      }
     );
   }
 
-  void _showCreateModal() {
-    XFile? tempImage;
-    showModalBottomSheet(
-      context: context, isScrollControlled: true, backgroundColor: Colors.transparent,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setModalState) => Container(
-          height: MediaQuery.of(context).size.height * 0.8,
-          decoration: const BoxDecoration(color: Color(0xFF0D1B3E), borderRadius: BorderRadius.vertical(top: Radius.circular(32))),
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            children: [
-              const Text('記憶を凍結する', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 20),
-              GestureDetector(
-                onTap: () async {
-                  final img = await _picker.pickImage(source: ImageSource.gallery);
-                  if (img != null) setModalState(() => tempImage = img);
-                },
-                child: Container(
-                  height: 200, width: double.infinity,
-                  decoration: IceEffects.glassStyle.copyWith(
-                    image: tempImage != null ? DecorationImage(image: kIsWeb ? NetworkImage(tempImage!.path) : FileImage(File(tempImage!.path)) as ImageProvider, fit: BoxFit.cover) : null,
-                  ),
-                  child: tempImage == null ? const Icon(Icons.add_a_photo, color: Colors.cyan, size: 40) : null,
-                ),
-              ),
-              TextField(controller: _createController, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(hintText: '何を封印しますか？', hintStyle: TextStyle(color: Colors.white24))),
-              const Spacer(),
-              ElevatedButton(
-                onPressed: () {
-                  if (tempImage != null && _createController.text.isNotEmpty) {
-                    setState(() {
-                      _memories.insert(0, Memory(
-                        id: DateTime.now().toString(), photo: tempImage!.path, text: _createController.text, author: _userProfile.username, authorId: _userProfile.id, createdAt: DateTime.now(), discovered: false, comments: [], guestComments: [], stampsCount: 0, digCount: 0, starRating: 3,
-                      ));
-                    });
-                    _createController.clear();
-                    Navigator.pop(context);
-                  }
-                },
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.cyan, minimumSize: const Size(double.infinity, 50)),
-                child: const Text('凍土に封印する', style: TextStyle(color: Colors.black)),
-              ),
-            ],
-          ),
-        ),
-      ),
+  Widget _buildAchievementsView() {
+    return FutureBuilder<Map<String, dynamic>>(
+      future: _api.fetchUserAchievementsAndDigs(_userProfile!.id),
+      builder: (context, snapshot) {
+        return const AchievementsScreen(); 
+      },
     );
   }
 
   ImageProvider _getImage(String path) {
+    if (path.isEmpty) return const NetworkImage('https://via.placeholder.com/150');
     if (path.startsWith('http') || kIsWeb) return NetworkImage(path);
     return FileImage(File(path));
   }
