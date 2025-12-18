@@ -7,9 +7,12 @@ import 'firebase_options.dart';
 import 'screens/home_screen.dart';
 import 'screens/top_screen.dart';
 
+// ... imports
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
+  // 1. Firebase初期化（まだならやる）
   if (Firebase.apps.isEmpty) {
     try {
       await Firebase.initializeApp(
@@ -20,9 +23,17 @@ void main() async {
     }
   }
 
+  // ★ 修正箇所：ifの外に出しました！
+  // これでホットリスタート時も必ず「検証無効化」が走ります
+  try {
+    await FirebaseAuth.instance.setSettings(appVerificationDisabledForTesting: true);
+    debugPrint('✅ Auth settings applied: verification disabled');
+  } catch (e) {
+    debugPrint('⚠️ Failed to set auth settings: $e');
+  }
+
   runApp(const MyApp());
 }
-
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
