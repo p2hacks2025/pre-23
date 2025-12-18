@@ -42,21 +42,21 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyBIG8EkkesAKs-E8sL6vXc8flbEYhCBEBw',
-    appId: '1:1078197154358:web:aba64f008d3ec502a01e97',
-    messagingSenderId: '1078197154358',
-    projectId: 'flozendmemory',
-    authDomain: 'flozendmemory.firebaseapp.com',
-    storageBucket: 'flozendmemory.firebasestorage.app',
-    measurementId: 'G-X45YNTFXMZ',
+    apiKey: 'AIzaSyDNFrS70mbgIjeX-BCUDzvsKQ0jKIvJZCM',
+    appId: '1:264211385958:web:b7420a6c80d0d9d008a7a7',
+    messagingSenderId: '264211385958',
+    projectId: 'frozenedmemories',
+    authDomain: 'frozenedmemories.firebaseapp.com',
+    storageBucket: 'frozenedmemories.firebasestorage.app',
+    measurementId: 'G-WZ8WL9YCBH',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyA_Inyj1d7U6DkdyiTjb1Rm0SAE_cjxT60',
-    appId: '1:1078197154358:android:7197438f0cfdeb62a01e97',
-    messagingSenderId: '1078197154358',
-    projectId: 'flozendmemory',
-    storageBucket: 'flozendmemory.firebasestorage.app',
+    apiKey: 'AIzaSyDgoszdpdMWbMh62UNdukmCKRVm4FNSaLs',
+    appId: '1:264211385958:android:8610e1d427fa725e08a7a7',
+    messagingSenderId: '264211385958',
+    projectId: 'frozenedmemories',
+    storageBucket: 'frozenedmemories.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(

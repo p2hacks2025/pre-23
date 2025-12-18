@@ -1,26 +1,51 @@
 {
   "project_info": {
-    "project_number": "1078197154358",
-    "project_id": "flozendmemory",
-    "storage_bucket": "flozendmemory.firebasestorage.app"
+    "project_number": "264211385958",
+    "project_id": "frozenedmemories",
+    "storage_bucket": "frozenedmemories.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:1078197154358:android:7197438f0cfdeb62a01e97",
+        "mobilesdk_app_id": "1:264211385958:android:8610e1d427fa725e08a7a7",
         "android_client_info": {
           "package_name": "com.example.memory_digging_app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "264211385958-81udu1ssfcjci97nlkfuqrsemkvqbgmu.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.memory_digging_app",
+            "certificate_hash": "e0ea009b6655bdd21cfa1f6265899953de78e2a2"
+          }
+        },
+        {
+          "client_id": "264211385958-ugp02nogt653ftjif82n2bb9925f0dk2.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
-          "current_key": "AIzaSyA_Inyj1d7U6DkdyiTjb1Rm0SAE_cjxT60"
+          "current_key": "AIzaSyDgoszdpdMWbMh62UNdukmCKRVm4FNSaLs"
         }
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "264211385958-ugp02nogt653ftjif82n2bb9925f0dk2.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "264211385958-bl6e0p4qt4rj43p9h2p0vdifftj2rde2.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.memoryDiggingApp"
+              }
+            }
+          ]
         }
       }
     }
