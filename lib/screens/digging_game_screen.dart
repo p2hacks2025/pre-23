@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'dart:io';
 import 'dart:ui';
 import 'dart:math';
+import 'package:audioplayers/audioplayers.dart'; // ★オーディオ追加
 import '../models/memory.dart';
 import '../widgets/effects.dart';
 
@@ -22,6 +23,10 @@ class _DiggingGameScreenState extends State<DiggingGameScreen> with TickerProvid
   int _clickCount = 0;
   int _targetIceIndex = 0; 
   
+  // ★ オーディオプレイヤーの定義
+  final AudioPlayer _sePlayer = AudioPlayer(); // 効果音用
+  final AudioPlayer _bgmPlayer = AudioPlayer(); // BGM用
+
   late AnimationController _shakeController;
   late AnimationController _shatterController;
   List<IceShard> _shards = [];
@@ -35,26 +40,54 @@ class _DiggingGameScreenState extends State<DiggingGameScreen> with TickerProvid
 
   @override
   void dispose() {
+    // ★ リソースの解放
+    _sePlayer.dispose();
+    _bgmPlayer.dispose();
     _shakeController.dispose();
     _shatterController.dispose();
     super.dispose();
   }
 
+  
+
+  void _stopBGM() {
+    _bgmPlayer.stop();
+  }
+
   void _handleTap() {
     if (_shatterController.isAnimating) return;
     HapticFeedback.mediumImpact();
+    
+    // タップ音（削る音）を入れる場合はここ
+    // _sePlayer.play(AssetSource('sounds/ice_tap.mp3'), mode: PlayerMode.lowLatency);
+
     _shakeController.forward(from: 0.0);
     setState(() => _clickCount++);
     if (_clickCount >= _targetMemory!.requiredClicks) _startShatterEffect();
   }
 
   void _startShatterEffect() {
+    // ★ 1. 氷が割れる音を再生
+    _sePlayer.play(AssetSource('icebreak.mp3'));
+    _stopBGM(); // 割れたらBGMを止める
+
     final random = Random();
-    _shards = List.generate(20, (index) => IceShard( // 破片を少し増やしました
-      angle: random.nextDouble() * pi * 2,
-      distance: 100.0 + random.nextDouble() * 200.0,
-      size: 8.0 + random.nextDouble() * 25.0,
-    ));
+    bool isRare = random.nextDouble() < 0.2;
+
+    _shards = List.generate(25, (index) {
+      Color shardColor = Colors.white.withOpacity(0.9);
+      if (isRare) {
+        shardColor = HSVColor.fromAHSV(1.0, random.nextDouble() * 360, 0.6, 1.0).toColor();
+      }
+
+      return IceShard(
+        angle: random.nextDouble() * pi * 2,
+        distance: 100.0 + random.nextDouble() * 200.0,
+        size: 8.0 + random.nextDouble() * 25.0,
+        color: shardColor,
+      );
+    });
+
     HapticFeedback.heavyImpact();
     _shatterController.forward(from: 0.0).then((_) => _onFinishDigging());
   }
@@ -80,9 +113,13 @@ class _DiggingGameScreenState extends State<DiggingGameScreen> with TickerProvid
   }
 
   Widget _buildIceBreakingGame() {
+    bool isShattering = _shatterController.isAnimating || _clickCount >= _targetMemory!.requiredClicks;
+    int remaining = isShattering ? 0 : (_targetMemory!.requiredClicks - _clickCount).clamp(0, 1000);
     double progress = (_clickCount / _targetMemory!.requiredClicks).clamp(0.0, 1.0);
+    
+    double photoOpacity = 0.3 + (progress * 0.7); 
     double iceOpacity = (1.0 - progress).clamp(0.0, 1.0);
-    double blurSigma = iceOpacity * 20.0;
+    double blurSigma = iceOpacity * 25.0;
 
     return Container(
       width: double.infinity, height: double.infinity,
@@ -103,11 +140,14 @@ class _DiggingGameScreenState extends State<DiggingGameScreen> with TickerProvid
               child: Stack(
                 alignment: Alignment.center,
                 children: [
-                  Container(
-                    width: 300, height: 300,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(24),
-                      image: DecorationImage(image: _getImage(_targetMemory!.photo), fit: BoxFit.cover),
+                  Opacity(
+                    opacity: photoOpacity,
+                    child: Container(
+                      width: 300, height: 300,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(24),
+                        image: DecorationImage(image: _getImage(_targetMemory!.photo), fit: BoxFit.cover),
+                      ),
                     ),
                   ),
                   if (!_shatterController.isAnimating)
@@ -125,7 +165,7 @@ class _DiggingGameScreenState extends State<DiggingGameScreen> with TickerProvid
                               border: Border.all(color: Colors.white.withOpacity(0.5), width: 2),
                             ),
                             child: CustomPaint(
-                              painter: IceCrackPainter(progress: progress), // 強化されたヒビ
+                              painter: IceCrackPainter(progress: progress),
                               child: const Icon(Icons.ac_unit, size: 80, color: Colors.white54),
                             ),
                           ),
@@ -142,16 +182,29 @@ class _DiggingGameScreenState extends State<DiggingGameScreen> with TickerProvid
                           child: Transform.rotate(angle: t * pi * 3, child: Opacity(opacity: 1.0 - t, child: child)),
                         );
                       },
-                      child: Container(width: shard.size, height: shard.size, decoration: BoxDecoration(color: Colors.white.withOpacity(0.95), borderRadius: BorderRadius.circular(2))),
-                    )),
+                      child: Container(
+                        width: shard.size, height: shard.size,
+                        decoration: BoxDecoration(
+                          color: shard.color, borderRadius: BorderRadius.circular(2),
+                          boxShadow: [
+                            if (shard.color != Colors.white.withOpacity(0.9))
+                              BoxShadow(color: shard.color.withOpacity(0.5), blurRadius: 10, spreadRadius: 2)
+                          ]
+                        ),
+                      ),
+                    )).toList(),
                 ],
               ),
             ),
           ),
           const SizedBox(height: 40),
-          Text(_shatterController.isAnimating ? "成功！" : '残り: ${_targetMemory!.requiredClicks - _clickCount}回', style: const TextStyle(color: Colors.cyan, fontSize: 24, fontWeight: FontWeight.bold)),
+          Text(_shatterController.isAnimating ? "成功！" : '残り: $remaining回', 
+                style: const TextStyle(color: Colors.cyan, fontSize: 24, fontWeight: FontWeight.bold)),
           const SizedBox(height: 20),
-          TextButton(onPressed: () => setState(() => _targetMemory = null), child: const Text("キャンセル", style: TextStyle(color: Colors.white24))),
+          TextButton(onPressed: () {
+            _stopBGM();
+            setState(() => _targetMemory = null);
+          }, child: const Text("キャンセル", style: TextStyle(color: Colors.white24))),
         ],
       ),
     );
@@ -159,7 +212,7 @@ class _DiggingGameScreenState extends State<DiggingGameScreen> with TickerProvid
 
   void _onFinishDigging() {
     final memory = _targetMemory!;
-    final TextEditingController commentController = TextEditingController();
+    final TextEditingController _commentController = TextEditingController();
     widget.onDiscover(memory);
     showDialog(
       context: context,
@@ -177,7 +230,7 @@ class _DiggingGameScreenState extends State<DiggingGameScreen> with TickerProvid
               const Text("この思い出に彩りを添えましょう", style: TextStyle(color: Colors.white70, fontSize: 12)),
               const SizedBox(height: 12),
               TextField(
-                controller: commentController,
+                controller: _commentController,
                 maxLength: 10,
                 style: const TextStyle(color: Colors.white),
                 decoration: InputDecoration(
@@ -195,15 +248,23 @@ class _DiggingGameScreenState extends State<DiggingGameScreen> with TickerProvid
         actions: [
           ElevatedButton.icon(
             onPressed: () {
+              // ★ 2. 想いを送る時のキラキラ音を再生
+              _sePlayer.play(AssetSource('sparkle.mp3'));
+
               setState(() {
                 memory.stampsCount++;
-                if (commentController.text.isNotEmpty) memory.guestComments.add(commentController.text);
+                if (_commentController.text.isNotEmpty) memory.guestComments.add(_commentController.text);
               });
               Navigator.pop(context); 
+              setState(() {
+                _targetMemory = null; 
+                _clickCount = 0; 
+                _shatterController.reset();
+              });
               _showCelebration(); 
             },
             icon: const Icon(Icons.auto_awesome),
-            label: const Text("キラキラを送って完了"),
+            label: const Text("キラキラを送して完了"),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.cyan, foregroundColor: Colors.black, minimumSize: const Size(double.infinity, 45)),
           ),
         ],
@@ -215,13 +276,7 @@ class _DiggingGameScreenState extends State<DiggingGameScreen> with TickerProvid
     late OverlayEntry overlayEntry;
     overlayEntry = OverlayEntry(
       builder: (context) => SuccessSparkleOverlay(
-        onFinished: () {
-          overlayEntry.remove();
-          setState(() {
-            _targetMemory = null; 
-            _shatterController.reset();
-          });
-        },
+        onFinished: () => overlayEntry.remove(),
       ),
     );
     Overlay.of(context).insert(overlayEntry);
@@ -253,7 +308,13 @@ class _DiggingGameScreenState extends State<DiggingGameScreen> with TickerProvid
                       Center(
                         child: ElevatedButton.icon(
                           style: ElevatedButton.styleFrom(backgroundColor: Colors.cyan, foregroundColor: Colors.black, elevation: 8),
-                          onPressed: () => setState(() { _targetMemory = memory; _clickCount = 0; _targetIceIndex = index; }),
+                          onPressed: () {
+                            setState(() { 
+                              _targetMemory = memory; 
+                              _clickCount = 0; 
+                              _targetIceIndex = index; 
+                            });
+                          },
                           icon: const Icon(Icons.hardware),
                           label: const Text("発掘する"),
                         ),
@@ -291,7 +352,10 @@ class _DiggingGameScreenState extends State<DiggingGameScreen> with TickerProvid
   }
 }
 
-// ★ キラキラ演出ウィジェット
+// -------------------------------------------------------------------------
+// 以下の演出ウィジェットもすべて保持（変更なし）
+// -------------------------------------------------------------------------
+
 class SuccessSparkleOverlay extends StatefulWidget {
   final VoidCallback onFinished;
   const SuccessSparkleOverlay({super.key, required this.onFinished});
@@ -366,10 +430,10 @@ class _SuccessSparkleOverlayState extends State<SuccessSparkleOverlay> with Sing
 
 class IceShard {
   final double angle, distance, size;
-  IceShard({required this.angle, required this.distance, required this.size});
+  final Color color; // レア破片用の色
+  IceShard({required this.angle, required this.distance, required this.size, required this.color});
 }
 
-// ★ 強化されたヒビ割れペインター
 class IceCrackPainter extends CustomPainter {
   final double progress;
   IceCrackPainter({required this.progress});
@@ -377,44 +441,25 @@ class IceCrackPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (progress < 0.1) return;
-
-    final paint = Paint()
-      ..color = Colors.white.withOpacity(0.8)
-      ..strokeWidth = 1.5
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-
-    final glowPaint = Paint()
-      ..color = Colors.white.withOpacity(0.2)
-      ..strokeWidth = 4.0
-      ..style = PaintingStyle.stroke
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2);
-
-    final random = Random(42); // シード固定で同じヒビパターンを維持
+    final paint = Paint()..color = Colors.white.withOpacity(0.8)..strokeWidth = 1.5..style = PaintingStyle.stroke..strokeCap = StrokeCap.round;
+    final glowPaint = Paint()..color = Colors.white.withOpacity(0.2)..strokeWidth = 4.0..style = PaintingStyle.stroke..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2);
+    final random = Random(42); 
     final centerX = size.width / 2;
     final centerY = size.height / 2;
-
     int mainCracks = (progress * 15).toInt().clamp(3, 15);
-
     for (int i = 0; i < mainCracks; i++) {
       final path = Path();
       path.moveTo(centerX, centerY);
-
       double currentX = centerX;
       double currentY = centerY;
       double angle = (i * (2 * pi / mainCracks)) + (random.nextDouble() * 0.5);
-      
-      // ヒビの長さ
       double maxLength = (size.width / 1.5) * progress;
       int segments = 5;
-
       for (int j = 0; j < segments; j++) {
         double step = (maxLength / segments);
         currentX += cos(angle) * step + (random.nextDouble() - 0.5) * 20;
         currentY += sin(angle) * step + (random.nextDouble() - 0.5) * 20;
         path.lineTo(currentX, currentY);
-
-        // 枝分かれ（progressが進んでいる場合のみ）
         if (progress > 0.4 && random.nextDouble() > 0.6) {
           _drawBranch(canvas, paint, currentX, currentY, angle + 0.8, progress * 30, random);
         }
@@ -427,9 +472,7 @@ class IceCrackPainter extends CustomPainter {
   void _drawBranch(Canvas canvas, Paint paint, double x, double y, double angle, double length, Random random) {
     final branchPath = Path();
     branchPath.moveTo(x, y);
-    double bx = x + cos(angle) * length;
-    double by = y + sin(angle) * length;
-    branchPath.lineTo(bx, by);
+    branchPath.lineTo(x + cos(angle) * length, y + sin(angle) * length);
     canvas.drawPath(branchPath, paint);
   }
 
