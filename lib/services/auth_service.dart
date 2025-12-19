@@ -28,19 +28,17 @@ class AuthService {
     return await _fetchProfileFromFirestore(credential.user!.uid);
   }
 
-  // 3. 新規登録（メール、パスワード、ユーザー名）
+  // 3. 新規登録
   Future<UserProfile> signUpWithEmail({
     required String email, 
     required String password, 
     required String username
   }) async {
-    // Firebase Authにユーザー作成
     final credential = await _auth.createUserWithEmailAndPassword(
       email: email, 
       password: password
     );
     
-    // Firestoreにプロフィール作成
     return await _createOrUpdateProfile(
       credential.user!.uid, 
       username,
@@ -48,15 +46,20 @@ class AuthService {
     );
   }
 
-  // 4. 匿名ログイン（予備として残す場合）
-  Future<UserProfile> signInAnonymously() async {
-    final userCredential = await _auth.signInAnonymously();
-    return await _createOrUpdateProfile(userCredential.user!.uid, '匿名ユーザー');
-  }
-
-  // 5. サインアウト
+  // 4. サインアウト
   Future<void> signOut() async {
     await _auth.signOut();
+  }
+
+  // ★追加: パスワード変更
+  Future<void> updatePassword(String newPassword) async {
+    final user = _auth.currentUser;
+    if (user != null) {
+      // Firebaseの仕様上、ログインから時間が経っているとエラー(requires-recent-login)になる場合があります
+      await user.updatePassword(newPassword);
+    } else {
+      throw Exception('ユーザーがログインしていません');
+    }
   }
 
   // --- 内部ヘルパーメソッド ---
@@ -66,7 +69,6 @@ class AuthService {
     if (doc.exists) {
       return UserProfile.fromJson(doc.data()!);
     }
-    // AuthにはいるがFirestoreにない場合（稀なケース）はプロフィール作成へ
     return await _createOrUpdateProfile(uid, 'ユーザー');
   }
   
@@ -74,11 +76,10 @@ class AuthService {
     final profileData = {
       'id': uid,
       'username': username,
-      'avatar': avatar ?? 'https://api.dicebear.com/7.x/avataaars/png?seed=$uid', // デフォルトアイコン
+      'avatar': avatar ?? 'https://api.dicebear.com/7.x/avataaars/png?seed=$uid',
       'bio': bio ?? '',
     };
     
-    // merge: true にすることで既存データを消さずに更新
     await _db.collection(_userProfilesCollection).doc(uid).set(profileData, SetOptions(merge: true));
     
     return UserProfile(

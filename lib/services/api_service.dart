@@ -6,6 +6,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/user_profile.dart';
 import '../models/memory.dart';
+import 'package:flutter/foundation.dart'; // for debugPrint
 //import '../models/game.dart';
 // import '../models/comment.dart'; 
 
@@ -93,7 +94,11 @@ class ApiService {
       await storageRef.putFile(file);
       remotePhotoUrl = await storageRef.getDownloadURL();
     } catch (e) {
-      print("画像アップロードエラー: $e");
+
+
+      debugPrint("画像アップロードエラー: $e");
+      // エラー時はダミーURLかローカルパスを入れるなどの救済措置
+
       remotePhotoUrl = 'https://via.placeholder.com/400'; 
     }
 
