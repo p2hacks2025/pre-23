@@ -443,28 +443,21 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       },
     );
   }
+ImageProvider _getImage(String path) {
+    // パスが空なら、例のダミー画像（もしくはassetsの画像）
+    if (path.isEmpty) {
+      // ネット環境がない場合も考慮するなら、前回作った 'assets/images/...' の方が安全です
+      return const AssetImage('assets/images/avatar_placeholder.png'); 
+    }
 
-  ImageProvider _getImage(String path) {
-    if (path.isEmpty) return const NetworkImage('https://via.placeholder.com/150');
-    
-    String safePath = _sanitizeUrl(path);
+    // ★ Web環境、またはURL形式の場合は NetworkImage
+    // (startsWith('blob:') はWebで画像選択した直後の一時パス対応です)
+    if (kIsWeb || path.startsWith('http') || path.startsWith('https') || path.startsWith('blob:')) {
+      return NetworkImage(path);
+    }
 
-
-  
-
-  // ★ Web環境での画像表示ロジック
-  if (kIsWeb) {
-    // Webの場合、Firebase StorageのURLも、選択直後のBlob URLも
-    // すべて NetworkImage で扱う必要があります
-    return NetworkImage(safePath);
+    // スマホアプリ（Android/iOS）のローカルファイル
+    return FileImage(File(path));
   }
 
-  // モバイル（iOS/Android）環境の場合
-  if (safePath.startsWith('http')) {
-    return NetworkImage(safePath);
-  } else {
-    // モバイルでローカルファイルを表示する場合のみ FileImage を使う
-    return FileImage(File(safePath));
-  }
-}
 }
