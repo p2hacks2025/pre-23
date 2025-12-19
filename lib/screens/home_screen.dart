@@ -305,22 +305,28 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   Widget _buildHomeView() {
     return StreamBuilder<List<Memory>>(
-      stream: _api.watchMyMemories(_userProfile!.id),
+      // 他人の思い出をリアルタイム監視
+      stream: _api.watchOthersMemories(_userProfile!.id),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator(color: Colors.cyan));
         }
         
-        final myMemories = snapshot.data ?? [];
+        // ★ 修正：他人の思い出の中で、すでに「発掘（解凍）済み」のものだけを表示
+        final discoveredCollection = (snapshot.data ?? [])
+            .where((m) => m.discovered == true)
+            .toList();
 
-        if (myMemories.isEmpty) {
+        if (discoveredCollection.isEmpty) {
           return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.ac_unit, size: 64, color: Colors.cyan.withValues(alpha: 0.3)),
+                Icon(Icons.auto_awesome, size: 64, color: Colors.cyan.withValues(alpha: 0.2)),
                 const SizedBox(height: 16),
-                const Text("まだ記憶を封印していません", style: TextStyle(color: Colors.white38)),
+                const Text("コレクションは空です", style: TextStyle(color: Colors.white38)),
+                const Text("「発掘」で誰かの思い出を救い出しましょう", 
+                  style: TextStyle(color: Colors.white24, fontSize: 12)),
               ],
             )
           );
@@ -331,9 +337,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 2, mainAxisSpacing: 16, crossAxisSpacing: 16, childAspectRatio: 0.75,
           ),
-          itemCount: myMemories.length,
+          itemCount: discoveredCollection.length,
           itemBuilder: (context, index) {
-            final memory = myMemories[index];
+            final memory = discoveredCollection[index];
             return AnimatedBuilder(
               animation: _shimmerController,
               builder: (context, child) {
@@ -341,9 +347,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   decoration: IceEffects.glassStyle.copyWith(
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.cyan.withValues(alpha: 0.1 + (_shimmerController.value * 0.15)),
-                        blurRadius: 10 + (_shimmerController.value * 10),
-                        spreadRadius: 1,
+                        color: Colors.cyan.withValues(alpha: 0.05 + (_shimmerController.value * 0.1)),
+                        blurRadius: 8 + (_shimmerController.value * 8),
                       )
                     ],
                   ),
@@ -371,19 +376,18 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(memory.text, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                          
-                          const SizedBox(height: 8),
+                          // 他人の思い出なので作成者名を表示
+                          Text(memory.author, 
+                            style: const TextStyle(color: Colors.cyan, fontSize: 10, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 2),
+                          Text(memory.text, maxLines: 1, overflow: TextOverflow.ellipsis, 
+                            style: const TextStyle(color: Colors.white, fontSize: 13)),
+                          const SizedBox(height: 6),
                           Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Row(
-                                children: [
-                                  const Text("✨", style: TextStyle(fontSize: 12)),
-                                  const SizedBox(width: 4),
-                                  Text("${memory.stampsCount}", style: const TextStyle(color: Colors.white70, fontSize: 12)),
-                                ],
-                              ),
+                              const Text("✨", style: TextStyle(fontSize: 10)),
+                              const SizedBox(width: 4),
+                              Text("${memory.stampsCount}", style: const TextStyle(color: Colors.white70, fontSize: 11)),
                             ],
                           ),
                         ],
@@ -406,15 +410,23 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         if (snapshot.connectionState == ConnectionState.waiting) {
            return const Center(child: CircularProgressIndicator(color: Colors.cyan));
         }
-        final otherMemories = snapshot.data ?? [];
         
-        if (otherMemories.isEmpty) {
-           return const Center(child: Text("発掘できる記憶がまだありません", style: TextStyle(color: Colors.white38)));
+        // ★ 修正：他人の思い出の中で「まだ誰も発掘していない」ものだけを表示
+        final undiscoveredMemories = (snapshot.data ?? [])
+            .where((m) => m.discovered == false)
+            .toList();
+        
+        if (undiscoveredMemories.isEmpty) {
+           return const Center(
+             child: Text("凍土に埋もれた記憶はすべて掘り起こされました", 
+               style: TextStyle(color: Colors.white38, fontSize: 12))
+           );
         }
 
         return DiggingGameScreen(
-          allOtherMemories: otherMemories,
+          allOtherMemories: undiscoveredMemories,
           onDiscover: (memory) {
+            // ApiService側で discovered = true に更新する
             _api.unlockMemory(memory.id, _userProfile!.id);
             _api.sendStamp(memory.id); 
           },
@@ -437,7 +449,23 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     
     String safePath = _sanitizeUrl(path);
 
-    if (safePath.startsWith('http') || kIsWeb) return NetworkImage(safePath);
+
+  // dicebearなどのSVG対策サニタイズ（既存のロジック）
+  String safePath = _sanitizeUrl(path);
+
+  // ★ Web環境での画像表示ロジック
+  if (kIsWeb) {
+    // Webの場合、Firebase StorageのURLも、選択直後のBlob URLも
+    // すべて NetworkImage で扱う必要があります
+    return NetworkImage(safePath);
+  }
+
+  // モバイル（iOS/Android）環境の場合
+  if (safePath.startsWith('http')) {
+    return NetworkImage(safePath);
+  } else {
+    // モバイルでローカルファイルを表示する場合のみ FileImage を使う
     return FileImage(File(safePath));
   }
+}
 }

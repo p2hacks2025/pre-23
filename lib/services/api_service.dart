@@ -62,6 +62,16 @@ class ApiService {
     });
   }
 
+  // ★ 追加: 全ての記憶を監視するStream (HomeScreenでのフィルタリング用)
+  Stream<List<Memory>> watchAllMemories() {
+    return _db
+        .collection(_memoriesCollection)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs.map((doc) => Memory.fromJson(doc.data())).toList();
+    });
+  }
+
   // --------------------------------------------------------------------------
   // 2. 記憶（Memory）の操作
   // --------------------------------------------------------------------------
@@ -84,8 +94,11 @@ class ApiService {
       await storageRef.putFile(file);
       remotePhotoUrl = await storageRef.getDownloadURL();
     } catch (e) {
+
+
       debugPrint("画像アップロードエラー: $e");
       // エラー時はダミーURLかローカルパスを入れるなどの救済措置
+
       remotePhotoUrl = 'https://via.placeholder.com/400'; 
     }
 
@@ -114,6 +127,7 @@ class ApiService {
   }
 
   // 記憶を発掘完了にする (digging_game_screen経由で使用)
+  // ★ 修正: 二重定義を解消し、discoveredフラグ更新を1つのメソッドに集約
   Future<void> unlockMemory(String memoryId, String userId) async {
     final docRef = _db.collection(_memoriesCollection).doc(memoryId);
     
@@ -122,11 +136,14 @@ class ApiService {
       if (!snapshot.exists) return;
 
       final currentDigs = snapshot.data()?['digCount'] ?? 0;
+      
+      // メモリ自体の更新
       transaction.update(docRef, {
         'digCount': currentDigs + 1,
+        'discovered': true, // これによりDiscovery画面から消え、Home画面に現れる
       });
       
-      // 発掘者の実績カウントアップ
+      // 発掘者の実績（累計発掘数）をカウントアップ
       final userRef = _db.collection(_userProfilesCollection).doc(userId);
       transaction.update(userRef, {
         'totalDigs': FieldValue.increment(1),
@@ -151,8 +168,6 @@ class ApiService {
     
     if (profileDoc.exists) {
       final data = profileDoc.data()!;
-      // Achievementモデルのパースが必要ならここで実施
-      // 今回は簡易的に totalDigs だけ返す例
       return {
         'totalDigs': data['totalDigs'] ?? 0,
       };
