@@ -1,74 +1,113 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../widgets/effects.dart';
-//lib/screens/achievements_screen.dart
+import '../services/api_service.dart';
+import '../services/auth_service.dart';
+import '../models/user_profile.dart';
 
 class AchievementsScreen extends StatelessWidget {
   const AchievementsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    // 統計値（デモデータ）
-    final stats = {
-      'digCount': 45,
-      'sendStampCount': 120,
-      'beenDugCount': 12,
-      'receiveStampCount': 8,
-    };
+    final AuthService auth = AuthService();
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: 20),
-          const Center(
-            child: Text(
-              'あなたの功績',
-              style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 4),
-            ),
-          ),
-          const SizedBox(height: 30),
-          _buildCategorySection(
-            context,
-            "記憶を紐解いた歩み",
-            "他人の氷を解いた数",
-            stats['digCount']!,
-            ["記憶の糸口", "思い出の解凍者", "物語を綴る風", "時を識る旅人"],
-            Icons.auto_fix_high,
-          ),
-          _buildCategorySection(
-            context,
-            "分け与えた慈しみ",
-            "キラキラを贈った数",
-            stats['sendStampCount']!,
-            ["ひとひらの輝き", "光の蒐集家", "記憶を照らす月", "永遠の星巡り"],
-            Icons.flare,
-          ),
-          _buildCategorySection(
-            context,
-            "誰かに触れられた記憶",
-            "自分の氷が解かれた数",
-            stats['beenDugCount']!,
-            ["目覚めるささやき", "透き通る結晶", "氷原の道標", "不滅の情景"],
-            Icons.cloud_queue,
-          ),
-          _buildCategorySection(
-            context,
-            "心に届いた共鳴",
-            "キラキラを贈られた数",
-            stats['receiveStampCount']!,
-            ["届いた光", "彩りの記憶", "心に降る銀河", "世界の灯火"],
-            Icons.auto_awesome,
-          ),
-        ],
-      ),
+    return FutureBuilder<UserProfile?>(
+      future: auth.getCurrentUser(),
+      builder: (context, authSnapshot) {
+        if (!authSnapshot.hasData) {
+          return const Center(child: CircularProgressIndicator(color: Colors.cyan));
+        }
+
+        final userId = authSnapshot.data!.id;
+
+        return StreamBuilder<DocumentSnapshot>(
+          stream: FirebaseFirestore.instance
+              .collection('userProfiles')
+              .doc(userId)
+              .snapshots(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator(color: Colors.cyan));
+            }
+
+            final data = snapshot.data?.data() as Map<String, dynamic>? ?? {};
+
+            // 統計データの取得（コメントカウントを削除）
+            final stats = {
+              'digCount': data['totalDigs'] ?? 0,
+              'sendStampCount': data['sendStampCount'] ?? 0,
+              'beenDugCount': data['beenDugCount'] ?? 0,
+              'receiveStampCount': data['receiveStampCount'] ?? 0,
+            };
+
+            return SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 20),
+                  const Center(
+                    child: Text(
+                      'あなたの功績',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 4),
+                    ),
+                  ),
+                  const SizedBox(height: 30),
+                  
+                  // 1. 発掘の実績
+                  _buildCategorySection(
+                    context,
+                    "記憶を紐解いた歩み",
+                    "他人の氷を解いた数",
+                    stats['digCount']!,
+                    ["記憶の糸口", "思い出の解凍者", "物語を綴る風", "時を識る旅人"],
+                    Icons.auto_fix_high,
+                  ),
+
+                  // 2. キラキラを贈った実績
+                  _buildCategorySection(
+                    context,
+                    "分け与えた慈しみ",
+                    "キラキラを贈った数",
+                    stats['sendStampCount']!,
+                    ["ひとひらの輝き", "光の蒐集家", "記憶を照らす月", "永遠の星巡り"],
+                    Icons.flare,
+                  ),
+
+                  // 3. 自分の投稿が掘られた実績
+                  _buildCategorySection(
+                    context,
+                    "誰かに触れられた記憶",
+                    "自分の氷が解かれた数",
+                    stats['beenDugCount']!,
+                    ["目覚めるささやき", "透き通る結晶", "氷原の道標", "不滅の情景"],
+                    Icons.cloud_queue,
+                  ),
+
+                  // 4. キラキラを貰った実績
+                  _buildCategorySection(
+                    context,
+                    "心に届いた共鳴",
+                    "キラキラを贈られた数",
+                    stats['receiveStampCount']!,
+                    ["届いた光", "彩りの記憶", "心に降る銀河", "世界の灯火"],
+                    Icons.auto_awesome,
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
+  // --- _buildCategorySection 以下のメソッドは以前のコードを維持 ---
   Widget _buildCategorySection(
     BuildContext context,
     String title,
@@ -100,8 +139,6 @@ class AchievementsScreen extends StatelessWidget {
           Text(subtitle,
               style: const TextStyle(color: Colors.white38, fontSize: 11)),
           const SizedBox(height: 16),
-
-          // 称号を横一列のスクロール形式に
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             physics: const BouncingScrollPhysics(),
@@ -136,7 +173,6 @@ class AchievementsScreen extends StatelessWidget {
               }),
             ),
           ),
-
           const SizedBox(height: 20),
           _buildEnhancedProgressBar(count, thresholds),
         ],
@@ -145,11 +181,8 @@ class AchievementsScreen extends StatelessWidget {
   }
 
   Widget _buildEnhancedProgressBar(int count, List<int> thresholds) {
-    // 現在目指している目標値を探す
     int nextThreshold = thresholds.firstWhere((t) => t > count, orElse: () => 0);
     bool isMax = nextThreshold == 0;
-
-    // プログレスバーの割合計算
     double progressValue;
     if (isMax) {
       progressValue = 1.0;
@@ -161,7 +194,7 @@ class AchievementsScreen extends StatelessWidget {
     return Column(
       children: [
         Row(
-          mainAxisAlignment: MainAxisAlignment.end, // ★分数表示を右寄せに修正
+          mainAxisAlignment: MainAxisAlignment.end,
           children: [
             Text(
               isMax ? "$count / Max" : "$count / $nextThreshold",
@@ -177,7 +210,6 @@ class AchievementsScreen extends StatelessWidget {
         const SizedBox(height: 8),
         Stack(
           children: [
-            // 背景バー
             Container(
               height: 4,
               decoration: BoxDecoration(
@@ -185,7 +217,6 @@ class AchievementsScreen extends StatelessWidget {
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
-            // 進捗バー
             AnimatedContainer(
               duration: const Duration(milliseconds: 500),
               height: 4,

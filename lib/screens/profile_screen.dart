@@ -1,8 +1,11 @@
 import 'dart:io';
 import 'dart:math';
-import 'package:flutter/foundation.dart'; // Web判定用
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+// ★ 追加：データの取得に必要
+import '../models/memory.dart'; 
+import '../services/api_service.dart'; // ApiServiceがある前提です
 import '../models/user_profile.dart';
 import '../services/auth_service.dart';
 
@@ -27,31 +30,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _showSavedNotification = false;
   String _notificationMessage = "保存しました";
   final AuthService _authService = AuthService();
+  // ★ APIサービスを初期化
+  final ApiService _api = ApiService(); 
 
-  // ★ ダミーの代替画像パス (lib/assets直下)
   final String _placeholderAsset = 'lib/assets/avatar_placeholder.png';
-
-  // ★ 投稿一覧のダミーデータ
-  final List<Map<String, dynamic>> _myPosts = [
-    {
-      'id': 1,
-      'imagePath': '',
-      'comment': '初めての永久凍土への保存...',
-      'stars': 3,
-    },
-    {
-      'id': 2,
-      'imagePath': '',
-      'comment': 'とってもきれいな風景だった。',
-      'stars': 5,
-    },
-    {
-      'id': 3,
-      'imagePath': '',
-      'comment': 'もう忘れたい記憶。',
-      'stars': 1,
-    },
-  ];
 
   @override
   void initState() {
@@ -73,7 +55,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     });
   }
 
-  void _showDeleteConfirmDialog(int index) {
+  // ★ 削除ロジックを本物のデータ（Memory型）に対応
+  void _showDeleteConfirmDialog(Memory memory) {
     showDialog(
       context: context,
       builder: (ctx) {
@@ -90,11 +73,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: const Text('キャンセル', style: TextStyle(color: Colors.white54)),
             ),
             ElevatedButton(
-              onPressed: () {
-                setState(() {
-                  _myPosts.removeAt(index);
-                });
-                Navigator.pop(ctx);
+              onPressed: () async {
+                // ★ Firestoreから削除を実行
+                await _api.deleteMemory(memory.id); 
+                if (mounted) Navigator.pop(ctx);
                 _triggerSaveNotification("投稿を削除しました");
               },
               style: ElevatedButton.styleFrom(
@@ -128,7 +110,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               padding: const EdgeInsets.only(bottom: 40),
               child: Column(
                 children: [
-                  // ドラッグハンドル
                   Container(
                     width: 40,
                     height: 4,
@@ -138,12 +119,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         borderRadius: BorderRadius.circular(2)),
                   ),
 
-                  // ★ プロフィールアイコン (CircleAvatarをやめて安全なウィジェットに変更)
                   _buildSafeAvatar(_currentProfile.avatar, 100),
 
                   const SizedBox(height: 16),
 
-                  // ユーザー名
                   Text(
                     _currentProfile.username,
                     style: const TextStyle(
@@ -153,7 +132,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                   const SizedBox(height: 8),
 
-                  // 自己紹介文
                   Text(
                     _currentProfile.bio.isNotEmpty
                         ? _currentProfile.bio
@@ -168,7 +146,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                   const SizedBox(height: 24),
 
-                  // アクションボタン
                   Row(
                     children: [
                       Expanded(
@@ -222,30 +199,44 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                   const SizedBox(height: 16),
 
-                  if (_myPosts.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.all(32.0),
-                      child: Text("まだ投稿はありません",
-                          style: TextStyle(color: Colors.white38)),
-                    )
-                  else
-                    ListView.separated(
-                      physics: const NeverScrollableScrollPhysics(),
-                      shrinkWrap: true,
-                      itemCount: _myPosts.length,
-                      separatorBuilder: (context, index) =>
-                          const SizedBox(height: 12),
-                      itemBuilder: (context, index) {
-                        final post = _myPosts[index];
-                        return _buildPostItem(post, index);
-                      },
-                    ),
+                  // ★ ここをダミーから Firestore ストリームに変更
+                  StreamBuilder<List<Memory>>(
+                    stream: _api.watchAllMemories(),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      
+                      // 自分の投稿（authorIdが一致するもの）だけをフィルタリング
+                      final myPosts = (snapshot.data ?? [])
+                          .where((m) => m.authorId == _currentProfile.id)
+                          .toList();
+
+                      if (myPosts.isEmpty) {
+                        return const Padding(
+                          padding: EdgeInsets.all(32.0),
+                          child: Text("まだ投稿はありません",
+                              style: TextStyle(color: Colors.white38)),
+                        );
+                      }
+
+                      return ListView.separated(
+                        physics: const NeverScrollableScrollPhysics(),
+                        shrinkWrap: true,
+                        itemCount: myPosts.length,
+                        separatorBuilder: (context, index) =>
+                            const SizedBox(height: 12),
+                        itemBuilder: (context, index) {
+                          return _buildPostItem(myPosts[index]);
+                        },
+                      );
+                    }
+                  ),
                 ],
               ),
             ),
           ),
 
-          // 通知バナー
           AnimatedPositioned(
             duration: const Duration(milliseconds: 500),
             curve: Curves.easeOutBack,
@@ -286,7 +277,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildPostItem(Map<String, dynamic> post, int index) {
+  // ★ 引数を Memory 型に変更
+  Widget _buildPostItem(Memory post) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -297,15 +289,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 画像サムネイル
           ClipRRect(
             borderRadius: BorderRadius.circular(12),
             child: Container(
               width: 70,
               height: 70,
               color: Colors.black26,
-              // ★ 安全な画像表示メソッドを使用
-              child: _getPostImage(post['imagePath']),
+              child: _getPostImage(post.photo), // post['imagePath'] から photo に変更
             ),
           ),
           const SizedBox(width: 12),
@@ -314,7 +304,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  post['comment'],
+                  post.text, // post['comment'] から text に変更
                   style: const TextStyle(color: Colors.white, fontSize: 14),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
@@ -322,7 +312,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 const SizedBox(height: 8),
                 Row(
                   children: List.generate(
-                    post['stars'],
+                    post.starRating, // stars から starRating に変更
                     (i) => const Icon(Icons.star, size: 14, color: Colors.amber),
                   ),
                 ),
@@ -334,7 +324,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             color: const Color(0xFF1E2C4B),
             onSelected: (value) {
               if (value == 'delete') {
-                _showDeleteConfirmDialog(index);
+                _showDeleteConfirmDialog(post); // 引数を変更
               }
             },
             itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
@@ -355,7 +345,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // ★ ネット切断時でも落ちない安全なアバター表示ウィジェット
   Widget _buildSafeAvatar(String path, double size) {
     return Container(
       width: size,
@@ -364,18 +353,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
         shape: BoxShape.circle,
         color: Colors.white10,
       ),
-      clipBehavior: Clip.antiAlias, // 画像を丸く切り抜く
+      clipBehavior: Clip.antiAlias,
       child: _getImageWidget(path),
     );
   }
 
-  // ★ 画像の種類（ネット、ローカル、アセット）を判別してWidgetを返す
   Widget _getImageWidget(String path) {
     if (path.isEmpty) {
       return const Icon(Icons.person, size: 50, color: Colors.white);
     }
 
-    // エラー時のフォールバック関数
     Widget errorWidget(BuildContext context, Object error, StackTrace? stackTrace) {
       return Image.asset(_placeholderAsset, fit: BoxFit.cover);
     }
@@ -393,23 +380,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
       );
     }
 
-    // ローカルファイル
     final file = File(path);
     if (file.existsSync()) {
       return Image.file(file, fit: BoxFit.cover, errorBuilder: errorWidget);
     } else {
-      // ファイルがない場合
       return Image.asset(_placeholderAsset, fit: BoxFit.cover);
     }
   }
 
-  // ★ 投稿一覧用の画像ウィジェット（アバター用と少し扱いが違うため分離）
   Widget _getPostImage(String path) {
     if (path.isEmpty) {
       return const Icon(Icons.image_not_supported, color: Colors.white24);
     }
     
-    // エラー時のフォールバック
     Widget errorWidget(BuildContext context, Object error, StackTrace? stackTrace) {
       return Image.asset(_placeholderAsset, fit: BoxFit.cover);
     }

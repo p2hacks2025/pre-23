@@ -1,5 +1,4 @@
-//lib/models/memory.dart
-
+import 'package:cloud_firestore/cloud_firestore.dart'; // ★必須：Timestamp型を扱うため
 import 'comment.dart';
 
 class Memory {
@@ -9,15 +8,13 @@ class Memory {
   final String author;
   final String? authorId;
   final DateTime createdAt;
-  bool discovered;
+  final bool discovered; // ★ final を追加して不変にする
   final List<Comment> comments;
   final int starRating;
-  
-  // ★ 修正：スタンプは✨1種類のみに統合
-  final List<String> guestComments; // 追加
-  int stampsCount;
-  // ★ 追加：累計発掘回数
-  int digCount;
+  final List<String> guestComments;
+  final int stampsCount; // ★ final を追加
+  final int digCount;    // ★ final を追加
+  final String? discoveredBy;
 
   Memory({
     required this.id,
@@ -29,13 +26,12 @@ class Memory {
     required this.discovered,
     required this.comments,
     this.starRating = 3,
-    required this.guestComments, // 追加
+    required this.guestComments,
     this.stampsCount = 0,
     this.digCount = 0,
+    this.discoveredBy,
   });
 
-  // ★ 重要：スタンプ数の合計で発掘に必要なタップ数が増えるロジック
-  // 基本値 (星×5) + スタンプされた数
   int get requiredClicks => (starRating * 5) + stampsCount;
 
   Map<String, dynamic> toJson() {
@@ -51,25 +47,46 @@ class Memory {
       'starRating': starRating,
       'stampsCount': stampsCount,
       'digCount': digCount,
+      'guestComments': guestComments,
+      'discoveredBy': discoveredBy,
     };
   }
 
   factory Memory.fromJson(Map<String, dynamic> json) {
+    // --- createdAt の安全な解析ロジックを追加 ---
+    DateTime parsedDate;
+    var rawDate = json['createdAt'];
+
+    if (rawDate is Timestamp) {
+      // Firestoreから直接届く「Timestamp型」の場合
+      parsedDate = rawDate.toDate();
+    } else if (rawDate is String) {
+      // JSON文字列（ISO8601）として届く場合
+      parsedDate = DateTime.tryParse(rawDate) ?? DateTime.now();
+    } else {
+      // データが欠落している等の場合
+      parsedDate = DateTime.now();
+    }
+    // ---------------------------------------
+
     return Memory(
-      id: json['id'],
-      photo: json['photo'],
-      text: json['text'],
-      author: json['author'],
+      id: json['id'] ?? '',
+      photo: json['photo'] ?? '',
+      text: json['text'] ?? '',
+      author: json['author'] ?? 'Unknown',
       authorId: json['authorId'],
-      createdAt: DateTime.parse(json['createdAt']),
+      createdAt: parsedDate, // 解析した日時を使用
       discovered: json['discovered'] ?? false,
       comments: (json['comments'] as List<dynamic>?)
               ?.map((c) => Comment.fromJson(c))
               .toList() ?? [],
       starRating: json['starRating'] ?? 3,
-      guestComments: (json['guestComments'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
+      guestComments: (json['guestComments'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ?? [],
       stampsCount: json['stampsCount'] ?? 0,
       digCount: json['digCount'] ?? 0,
+      discoveredBy: json['discoveredBy'],
     );
   }
 }
