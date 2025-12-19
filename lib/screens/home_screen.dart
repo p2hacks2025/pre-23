@@ -450,8 +450,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     String safePath = _sanitizeUrl(path);
 
 
-  // dicebearなどのSVG対策サニタイズ（既存のロジック）
-  String safePath = _sanitizeUrl(path);
+  
 
   // ★ Web環境での画像表示ロジック
   if (kIsWeb) {
