@@ -3,9 +3,9 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-// ★ 追加：データの取得に必要
+// ★ 必要なモデルとサービスをインポート
 import '../models/memory.dart'; 
-import '../services/api_service.dart'; // ApiServiceがある前提です
+import '../services/api_service.dart'; 
 import '../models/user_profile.dart';
 import '../services/auth_service.dart';
 
@@ -146,21 +146,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                   const SizedBox(height: 24),
 
+                  // ★ ここを変更: 左にログアウト、右に編集
                   Row(
                     children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: () => _showEditDialog(context),
-                          icon: const Icon(Icons.edit, size: 16),
-                          label: const Text('編集'),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.white70,
-                            side: const BorderSide(color: Colors.white24),
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
+                      // 左: ログアウトボタン
                       Expanded(
                         child: ElevatedButton.icon(
                           onPressed: () async {
@@ -178,6 +167,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                           icon: const Icon(Icons.logout, size: 16),
                           label: const Text('ログアウト'),
+                        ),
+                      ),
+                      
+                      const SizedBox(width: 12),
+                      
+                      // 右: 編集ボタン
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () => _showEditDialog(context),
+                          icon: const Icon(Icons.edit, size: 16),
+                          label: const Text('編集'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.white70,
+                            side: const BorderSide(color: Colors.white24),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
                         ),
                       ),
                     ],
@@ -199,7 +204,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                   const SizedBox(height: 16),
 
-                  // ★ ここをダミーから Firestore ストリームに変更
+                  // ★ Firestore ストリームで自分の投稿を表示
                   StreamBuilder<List<Memory>>(
                     stream: _api.watchAllMemories(),
                     builder: (context, snapshot) {
