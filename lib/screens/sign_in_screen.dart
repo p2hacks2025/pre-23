@@ -28,6 +28,8 @@ class _SignInScreenState extends State<SignInScreen> {
   bool _isLoading = false;
   // false = ログインモード, true = 新規登録モード
   bool _isRegisterMode = false; 
+  // ★ ProfileScreenと同じパスワード可視化フラグ
+  bool _isPasswordObscured = true; 
   String? _errorMessage;
 
   // メインの処理
@@ -65,7 +67,6 @@ class _SignInScreenState extends State<SignInScreen> {
             username: _usernameController.text.trim(),
           );
         } on FirebaseAuthException catch (e) {
-          // ★ 既に登録済みだった場合、ログインモードへ誘導
           if (e.code == 'email-already-in-use') {
             setState(() {
               _isRegisterMode = false; // ログインモードへ
@@ -83,7 +84,6 @@ class _SignInScreenState extends State<SignInScreen> {
         try {
           profile = await _auth.signInWithEmail(email, password);
         } on FirebaseAuthException catch (e) {
-          // ★ アカウントがない場合、新規登録モードへ誘導
           if (e.code == 'user-not-found' || e.code == 'invalid-credential') {
             setState(() {
               _isRegisterMode = true; // 新規登録モードへ
@@ -124,13 +124,11 @@ class _SignInScreenState extends State<SignInScreen> {
     if (msg.contains('configuration-not-found')) return '認証設定が無効です。\nFirebaseコンソールでメール認証をONにしてください。';
     if (msg.contains('network-request-failed')) return '通信エラーが発生しました。接続を確認してください。';
     
-    // 不要なプレフィックスを除去
     return msg.replaceAll('Exception:', '').replaceAll(RegExp(r'\[firebase_auth/.*\]\s*'), '');
   }
 
   @override
   Widget build(BuildContext context) {
-    // 背景タップでキーボードを閉じる
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
       child: Material(
@@ -160,7 +158,6 @@ class _SignInScreenState extends State<SignInScreen> {
                   ),
                   const SizedBox(height: 24),
 
-                  // エラー表示エリア
                   if (_errorMessage != null) ...[
                     Container(
                       padding: const EdgeInsets.all(12),
@@ -178,7 +175,6 @@ class _SignInScreenState extends State<SignInScreen> {
                     const SizedBox(height: 16),
                   ],
 
-                  // メールアドレス入力
                   _buildTextField(
                     controller: _emailController,
                     label: 'メールアドレス',
@@ -187,15 +183,26 @@ class _SignInScreenState extends State<SignInScreen> {
                   ),
                   const SizedBox(height: 16),
 
-                  // パスワード入力
+                  // ★ 修正：ProfileScreenと同じロジックのパスワード入力欄
                   _buildTextField(
                     controller: _passwordController,
                     label: 'パスワード (6文字以上)',
                     icon: Icons.lock_outline,
-                    obscureText: true,
+                    obscureText: _isPasswordObscured,
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _isPasswordObscured ? Icons.visibility : Icons.visibility_off,
+                        color: Colors.white54,
+                        size: 20,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          _isPasswordObscured = !_isPasswordObscured;
+                        });
+                      },
+                    ),
                   ),
                   
-                  // 新規登録時のみユーザー名を表示
                   if (_isRegisterMode) ...[
                     const SizedBox(height: 16),
                     _buildTextField(
@@ -207,7 +214,6 @@ class _SignInScreenState extends State<SignInScreen> {
 
                   const SizedBox(height: 24),
 
-                  // 実行ボタン
                   if (_isLoading)
                     const Center(child: CircularProgressIndicator(color: Colors.cyan))
                   else
@@ -228,12 +234,13 @@ class _SignInScreenState extends State<SignInScreen> {
 
                   const SizedBox(height: 16),
 
-                  // ★ 手動切り替えボタン
                   TextButton(
                     onPressed: () {
                       setState(() {
                         _isRegisterMode = !_isRegisterMode;
                         _errorMessage = null;
+                        // モード切り替え時にパスワード非表示状態に戻す
+                        _isPasswordObscured = true;
                       });
                     },
                     child: Text(
@@ -263,6 +270,7 @@ class _SignInScreenState extends State<SignInScreen> {
     required IconData icon,
     bool obscureText = false,
     TextInputType inputType = TextInputType.text,
+    Widget? suffixIcon, 
   }) {
     return TextField(
       controller: controller,
@@ -273,6 +281,7 @@ class _SignInScreenState extends State<SignInScreen> {
         labelText: label,
         labelStyle: const TextStyle(color: Colors.white38),
         prefixIcon: Icon(icon, color: Colors.cyan.withOpacity(0.7), size: 20),
+        suffixIcon: suffixIcon,
         filled: true,
         fillColor: Colors.black26,
         enabledBorder: OutlineInputBorder(
@@ -287,7 +296,6 @@ class _SignInScreenState extends State<SignInScreen> {
       ),
     );
   }
-
 
   @override
   void dispose() {

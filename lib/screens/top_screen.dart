@@ -1,5 +1,4 @@
-// lib/screens/top_screen.dart
-
+import 'dart:math'; // 粒子エフェクト用に追加
 import 'package:flutter/material.dart';
 import 'sign_in_screen.dart';
 import 'home_screen.dart';
@@ -9,7 +8,6 @@ class TopScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 画面全体
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(
@@ -25,8 +23,8 @@ class TopScreen extends StatelessWidget {
         child: SafeArea(
           child: Stack(
             children: [
-              // 背景の粒子エフェクト（簡易的な星空のような点）
-              ...List.generate(20, (index) => _buildParticle(context)),
+              // 背景の粒子エフェクト（機能を具体化：20個の星をランダム配置）
+              ...List.generate(20, (index) => _buildParticle(context, index)),
 
               // メインコンテンツ
               Center(
@@ -61,7 +59,7 @@ class TopScreen extends StatelessWidget {
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
                         letterSpacing: 3.0,
-                        fontFamily: 'Serif', // 明朝体っぽいフォントがあれば指定
+                        fontFamily: 'Serif',
                         shadows: [
                           Shadow(color: Colors.cyan, blurRadius: 20, offset: Offset(0, 0)),
                         ],
@@ -123,32 +121,45 @@ class TopScreen extends StatelessWidget {
     );
   }
 
-  // 簡易的な背景の点（装飾）
-  Widget _buildParticle(BuildContext context) {
-    // ※本来は乱数で位置を決めますが、簡易的に固定配置の例です
-    // ランダム配置にするには Random() を使うと良いです
-    return const SizedBox.shrink(); 
+  // 機能を具体化した粒子エフェクト
+  Widget _buildParticle(BuildContext context, int index) {
+    final random = Random(index); // インデックスをシードにして配置を固定
+    final top = random.nextDouble() * MediaQuery.of(context).size.height;
+    final left = random.nextDouble() * MediaQuery.of(context).size.width;
+    final size = random.nextDouble() * 3;
+
+    return Positioned(
+      top: top,
+      left: left,
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(random.nextDouble() * 0.5),
+          shape: BoxShape.circle,
+        ),
+      ),
+    );
   }
 
-  // サインイン画面を表示する処理
   void _showSignIn(BuildContext context) {
     showDialog(
       context: context,
-      barrierColor: Colors.transparent, // SignInScreenが背景色を持っているので透明に
+      barrierColor: Colors.transparent,
       builder: (context) => SignInScreen(
-        onCancel: () => Navigator.pop(context), // キャンセルしたら閉じるだけ
+        onCancel: () => Navigator.pop(context),
         onSignedIn: (profile) {
-          // ログイン完了時の処理
-          
-          // 1. まずホーム画面へ遷移（フェードアニメーション付き）
-          Navigator.of(context).pushReplacement(
+          // ★ 修正：ログイン成功時、履歴をすべて消してホーム画面へ
+          // これにより、ログアウト時に安全にTopScreenへ戻れるようになります
+          Navigator.of(context).pushAndRemoveUntil(
             PageRouteBuilder(
               pageBuilder: (context, animation, secondaryAnimation) => const HomeScreen(),
               transitionsBuilder: (context, animation, secondaryAnimation, child) {
                 return FadeTransition(opacity: animation, child: child);
               },
-              transitionDuration: const Duration(milliseconds: 1000), // ゆっくり遷移
+              transitionDuration: const Duration(milliseconds: 1000),
             ),
+            (route) => false, // スタックを空にする
           );
         },
       ),

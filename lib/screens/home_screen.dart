@@ -1,6 +1,5 @@
-// lib/screens/home_screen.dart
-
 import 'dart:io';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart'; 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -35,6 +34,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   
   late PageController _pageController;
   late AnimationController _shimmerController;
+  
+  StreamSubscription<UserProfile?>? _authSubscription;
 
   @override
   void initState() {
@@ -46,36 +47,42 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       duration: const Duration(seconds: 2),
     )..repeat(reverse: true);
 
-    _initUser();
+    _listenToAuthChanges();
   }
 
-  Future<void> _initUser() async {
-    try {
-      final profile = await _auth.getCurrentUser();
-      if (mounted) {
+  void _listenToAuthChanges() {
+    _authSubscription?.cancel();
+    _authSubscription = _auth.authStateChanges().listen((profile) {
+      if (!mounted) return;
+
+      if (profile == null) {
+        // ★ 修正：Navigator操作を一切行わない
+        // main.dart の StreamBuilder が自動的に TopScreen に切り替えるため、
+        // ここでは状態のクリーンアップ（もし必要なら）のみに留めます。
         setState(() {
-          _userProfile = profile;
+          _userProfile = null;
           _isLoading = false;
         });
+        return;
       }
-    } catch (e) {
-      debugPrint("ユーザー読み込みエラー: $e");
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
-    }
+      setState(() {
+        _userProfile = profile;
+        _isLoading = false;
+      });
+    });
   }
 
   @override
   void dispose() {
+    _authSubscription?.cancel();
     _pageController.dispose();
     _shimmerController.dispose();
     super.dispose();
   }
 
+  // --- プロフィール・投稿作成などのメソッドは変更なし（そのまま維持） ---
   void _openProfile() {
     if (_userProfile == null) return;
-    
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -83,27 +90,24 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       builder: (context) => ProfileScreen(
         profile: _userProfile!,
         onClose: () => Navigator.pop(context),
-        
         onSave: (updatedProfile) async {
-          // ★修正ポイント: 非同期処理の前にMessengerを確保する
           final messenger = ScaffoldMessenger.of(context);
-
           try {
             String finalAvatarUrl = updatedProfile.avatar;
-
-            // 画像アップロード処理
             if (finalAvatarUrl.isNotEmpty && !finalAvatarUrl.startsWith('http')) {
-              final file = File(finalAvatarUrl);
               final storageRef = FirebaseStorage.instance
                   .ref()
                   .child('user_avatars')
                   .child('${updatedProfile.id}_${DateTime.now().millisecondsSinceEpoch}.jpg');
 
-              await storageRef.putFile(file);
+              if (kIsWeb) {
+                await storageRef.putData(await _api.getImageBytes(finalAvatarUrl));
+              } else {
+                await storageRef.putFile(File(finalAvatarUrl));
+              }
               finalAvatarUrl = await storageRef.getDownloadURL();
             }
 
-            // 1. Firestore更新
             await FirebaseFirestore.instance
                 .collection('userProfiles')
                 .doc(updatedProfile.id)
@@ -113,7 +117,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               'avatar': finalAvatarUrl,
             });
 
-            // 2. ホーム画面側の状態も更新
             if (mounted) {
               setState(() {
                 _userProfile = UserProfile(
@@ -125,11 +128,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               });
             }
           } catch (e) {
-            debugPrint("プロフィール更新エラー: $e");
-            // ★確保したmessengerを使って表示
-            messenger.showSnackBar(
-              SnackBar(content: Text('更新に失敗しました: $e')),
-            );
+            debugPrint("画像アップロードエラー: $e");
+            messenger.showSnackBar(SnackBar(content: Text('更新に失敗しました: $e')));
           }
         },
       ),
@@ -138,7 +138,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   void _showCreateModal() {
     if (_userProfile == null) return;
-
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -153,7 +152,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           initialAuthor: _userProfile!.username,
           onCancel: () => Navigator.pop(ctx),
           onSubmit: (photoPath, text, author, starRating) async {
-            // ★修正: NavigatorとMessengerを事前に確保
             final navigator = Navigator.of(ctx);
             final messenger = ScaffoldMessenger.of(ctx);
 
@@ -167,9 +165,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             
             if (navigator.canPop()) {
               navigator.pop();
-              messenger.showSnackBar(
-                const SnackBar(content: Text('記憶を凍土に封印しました...')),
-              );
+              messenger.showSnackBar(const SnackBar(content: Text('記憶を凍土に封印しました...')));
             }
           },
         ),
@@ -216,18 +212,18 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 itemCount: memory.guestComments.length,
                 itemBuilder: (context, index) {
                    return Container(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.05),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.cyan.withValues(alpha: 0.1)),
-                      ),
-                      child: Text(
-                        "✨ ${memory.guestComments[index]}",
-                        style: const TextStyle(color: Colors.white, fontSize: 13),
-                      ),
-                    );
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.cyan.withOpacity(0.1)),
+                    ),
+                    child: Text(
+                      "✨ ${memory.guestComments[index]}",
+                      style: const TextStyle(color: Colors.white, fontSize: 13),
+                    ),
+                  );
                 },
               ),
             ),
@@ -245,6 +241,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
+    // ログアウト処理中の null 安全ガード
+    if (_userProfile == null && !_isLoading) {
+      return const Scaffold(backgroundColor: Colors.black);
+    }
+
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -303,29 +304,35 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
+  // --- 各 View のビルドメソッド（変更なし、安全な activeUid チェックを維持） ---
   Widget _buildHomeView() {
+    final activeUid = _userProfile?.id;
+    if (activeUid == null) return const SizedBox.shrink();
+
     return StreamBuilder<List<Memory>>(
-      // 他人の思い出をリアルタイム監視
-      stream: _api.watchOthersMemories(_userProfile!.id),
+      stream: _api.watchAllMemories(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator(color: Colors.cyan));
         }
         
-        // ★ 修正：他人の思い出の中で、すでに「発掘（解凍）済み」のものだけを表示
-        final discoveredCollection = (snapshot.data ?? [])
-            .where((m) => m.discovered == true)
-            .toList();
+        // ★ 修正：条件を「自分が発掘したもの」に限定する
+        // 他人が投稿したか自分かは問わず、とにかく「自分が発掘（discoveredBy）」した記憶のみを表示
+        final myCollection = (snapshot.data ?? []).where((m) {
+          return m.discoveredBy == activeUid; 
+        }).toList();
 
-        if (discoveredCollection.isEmpty) {
+        myCollection.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+        if (myCollection.isEmpty) {
           return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.auto_awesome, size: 64, color: Colors.cyan.withValues(alpha: 0.2)),
+                Icon(Icons.auto_awesome, size: 64, color: Colors.cyan.withOpacity(0.2)),
                 const SizedBox(height: 16),
                 const Text("コレクションは空です", style: TextStyle(color: Colors.white38)),
-                const Text("「発掘」で誰かの思い出を救い出しましょう", 
+                const Text("「発掘」で誰かの思い出を掘り起こしましょう", 
                   style: TextStyle(color: Colors.white24, fontSize: 12)),
               ],
             )
@@ -337,9 +344,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 2, mainAxisSpacing: 16, crossAxisSpacing: 16, childAspectRatio: 0.75,
           ),
-          itemCount: discoveredCollection.length,
+          itemCount: myCollection.length,
           itemBuilder: (context, index) {
-            final memory = discoveredCollection[index];
+            final memory = myCollection[index];
             return AnimatedBuilder(
               animation: _shimmerController,
               builder: (context, child) {
@@ -347,7 +354,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   decoration: IceEffects.glassStyle.copyWith(
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.cyan.withValues(alpha: 0.05 + (_shimmerController.value * 0.1)),
+                        color: Colors.cyan.withOpacity(0.05 + (_shimmerController.value * 0.1)),
                         blurRadius: 8 + (_shimmerController.value * 8),
                       )
                     ],
@@ -363,11 +370,25 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     Expanded(
                       child: ClipRRect(
                         borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                        child: Image(
-                          image: _getImage(memory.photo), 
-                          fit: BoxFit.cover, 
-                          width: double.infinity,
-                          errorBuilder: (c, o, s) => Container(color: Colors.grey[900], child: const Icon(Icons.broken_image, color: Colors.white24)),
+                        child: Stack(
+                          children: [
+                            Image(
+                              image: _getImage(memory.photo), 
+                              fit: BoxFit.cover, 
+                              width: double.infinity,
+                              height: double.infinity,
+                              errorBuilder: (c, o, s) => Container(color: Colors.grey[900], child: const Icon(Icons.broken_image, color: Colors.white24)),
+                            ),
+                            if (memory.authorId != activeUid)
+                              Positioned(
+                                top: 8, right: 8,
+                                child: Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(4)),
+                                  child: const Icon(Icons.verified_user_outlined, color: Colors.cyanAccent, size: 16),
+                                ),
+                              ),
+                          ],
                         ),
                       ),
                     ),
@@ -376,12 +397,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // 他人の思い出なので作成者名を表示
-                          Text(memory.author, 
-                            style: const TextStyle(color: Colors.cyan, fontSize: 10, fontWeight: FontWeight.bold)),
+                          Text(memory.author, style: const TextStyle(color: Colors.cyan, fontSize: 10, fontWeight: FontWeight.bold)),
                           const SizedBox(height: 2),
-                          Text(memory.text, maxLines: 1, overflow: TextOverflow.ellipsis, 
-                            style: const TextStyle(color: Colors.white, fontSize: 13)),
+                          Text(memory.text, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 13)),
                           const SizedBox(height: 6),
                           Row(
                             children: [
@@ -404,31 +422,57 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildDiscoveryView() {
+    final activeUid = _userProfile?.id;
+    if (activeUid == null) return const SizedBox.shrink();
+
     return StreamBuilder<List<Memory>>(
-      stream: _api.watchOthersMemories(_userProfile!.id),
+      stream: _api.watchAllMemories(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-           return const Center(child: CircularProgressIndicator(color: Colors.cyan));
+          return const Center(child: CircularProgressIndicator(color: Colors.cyan));
         }
-        
-        // ★ 修正：他人の思い出の中で「まだ誰も発掘していない」ものだけを表示
-        final undiscoveredMemories = (snapshot.data ?? [])
-            .where((m) => m.discovered == false)
-            .toList();
+
+        // フィルタリング条件
+        final undiscoveredMemories = (snapshot.data ?? []).where((m) {
+          return m.authorId != activeUid && 
+                 m.discovered == false && 
+                 m.discoveredBy != activeUid;
+        }).toList();
         
         if (undiscoveredMemories.isEmpty) {
-           return const Center(
-             child: Text("凍土に埋もれた記憶はすべて掘り起こされました", 
-               style: TextStyle(color: Colors.white38, fontSize: 12))
-           );
+          return const Center(
+            child: Text("凍土に埋もれた記憶はすべて掘り起こされました", 
+              style: TextStyle(color: Colors.white38, fontSize: 12))
+          );
         }
 
         return DiggingGameScreen(
           allOtherMemories: undiscoveredMemories,
-          onDiscover: (memory) {
-            // ApiService側で discovered = true に更新する
-            _api.unlockMemory(memory.id, _userProfile!.id);
-            _api.sendStamp(memory.id); 
+          // ★ 引数を3つ (memory, comment, sendStamp) に更新
+          onDiscover: (memory, comment, sendStamp) async {
+            final discovererUid = activeUid;
+
+            try {
+              // 1. 裏側でFirestoreを更新する
+              await _api.unlockMemory(
+                memoryId: memory.id,
+                userId: discovererUid,
+                comment: comment,
+                // ★ ユーザーがダイアログで選んだ boolean をそのまま渡す
+                sendStampAutomatically: sendStamp,
+              );
+
+              // 完了ログ(SnackBar)は削除済み。
+              // 演出は DiggingGameScreen 側の _showCelebration() が担当します。
+              
+            } catch (e) {
+              debugPrint("発掘エラー: $e");
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('通信に失敗しました。もう一度お試しください。')),
+                );
+              }
+            }
           },
         );
       }
@@ -436,28 +480,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildAchievementsView() {
-    return FutureBuilder<Map<String, dynamic>>(
-      future: _api.fetchUserAchievementsAndDigs(_userProfile!.id),
-      builder: (context, snapshot) {
-        return const AchievementsScreen(); 
-      },
-    );
+    return AchievementsScreen();
   }
-ImageProvider _getImage(String path) {
-    // パスが空なら、例のダミー画像（もしくはassetsの画像）
-    if (path.isEmpty) {
-      // ネット環境がない場合も考慮するなら、前回作った 'assets/images/...' の方が安全です
-      return const AssetImage('assets/images/avatar_placeholder.png'); 
-    }
 
-    // ★ Web環境、またはURL形式の場合は NetworkImage
-    // (startsWith('blob:') はWebで画像選択した直後の一時パス対応です)
+  ImageProvider _getImage(String path) {
+    if (path.isEmpty) return const AssetImage('assets/images/avatar_placeholder.png'); 
     if (kIsWeb || path.startsWith('http') || path.startsWith('https') || path.startsWith('blob:')) {
       return NetworkImage(path);
     }
-
-    // スマホアプリ（Android/iOS）のローカルファイル
     return FileImage(File(path));
   }
-
 }

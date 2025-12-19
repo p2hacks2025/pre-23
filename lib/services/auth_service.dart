@@ -1,5 +1,3 @@
-// lib/services/auth_service.dart
-
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/user_profile.dart';
@@ -10,7 +8,17 @@ class AuthService {
   
   static const String _userProfilesCollection = 'userProfiles';
 
-  // 1. 現在のユーザー取得
+  // ★追加: ログイン状態の変化をリアルタイムで流す (機能を減らさず追加)
+  // これにより、ログイン・ログアウトした瞬間に他の画面がそれを検知できます
+  Stream<UserProfile?> authStateChanges() {
+    return _auth.authStateChanges().asyncMap((user) async {
+      if (user == null) return null;
+      // ユーザーが切り替わったらFirestoreから最新のプロフィールを取得
+      return await _fetchProfileFromFirestore(user.uid);
+    });
+  }
+
+  // 1. 現在のユーザー取得 (既存)
   Future<UserProfile> getCurrentUser() async {
     final user = _auth.currentUser;
     if (user == null) {
@@ -19,7 +27,7 @@ class AuthService {
     return await _fetchProfileFromFirestore(user.uid);
   }
 
-  // 2. メールとパスワードでログイン
+  // 2. メールとパスワードでログイン (既存)
   Future<UserProfile> signInWithEmail(String email, String password) async {
     final credential = await _auth.signInWithEmailAndPassword(
       email: email, 
@@ -28,7 +36,7 @@ class AuthService {
     return await _fetchProfileFromFirestore(credential.user!.uid);
   }
 
-  // 3. 新規登録
+  // 3. 新規登録 (既存)
   Future<UserProfile> signUpWithEmail({
     required String email, 
     required String password, 
@@ -46,23 +54,22 @@ class AuthService {
     );
   }
 
-  // 4. サインアウト
+  // 4. サインアウト (既存)
   Future<void> signOut() async {
     await _auth.signOut();
   }
 
-  // ★追加: パスワード変更
+  // 5. パスワード変更 (既存)
   Future<void> updatePassword(String newPassword) async {
     final user = _auth.currentUser;
     if (user != null) {
-      // Firebaseの仕様上、ログインから時間が経っているとエラー(requires-recent-login)になる場合があります
       await user.updatePassword(newPassword);
     } else {
       throw Exception('ユーザーがログインしていません');
     }
   }
 
-  // --- 内部ヘルパーメソッド ---
+  // --- 内部ヘルパーメソッド (既存) ---
 
   Future<UserProfile> _fetchProfileFromFirestore(String uid) async {
     final doc = await _db.collection(_userProfilesCollection).doc(uid).get();

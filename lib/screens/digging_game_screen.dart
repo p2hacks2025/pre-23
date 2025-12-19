@@ -10,9 +10,7 @@ import '../widgets/effects.dart';
 
 class DiggingGameScreen extends StatefulWidget {
   final List<Memory> allOtherMemories;
-  final Function(Memory) onDiscover;
-
-  const DiggingGameScreen({super.key, required this.allOtherMemories, required this.onDiscover});
+final Function(Memory, String?, bool) onDiscover;  const DiggingGameScreen({super.key, required this.allOtherMemories, required this.onDiscover});
 
   @override
   State<DiggingGameScreen> createState() => _DiggingGameScreenState();
@@ -22,7 +20,29 @@ class _DiggingGameScreenState extends State<DiggingGameScreen> with TickerProvid
   Memory? _targetMemory;
   int _clickCount = 0;
   int _targetIceIndex = 0; 
-  
+  int _calculatedRequiredClicks = 10; // ★ 動的に計算したクリック数を保持
+  int _calculateDifficulty(DateTime createdAt) {
+    final now = DateTime.now();
+    final age = now.difference(createdAt);
+
+    if (age.inHours < 1) {
+      return 8;   // 生まれたて：サクサク
+    } else if (age.inDays < 1) {
+      return 15;  // 1日以内：標準
+    } else if (age.inDays < 7) {
+      return 30;  // 1週間以内：少し硬い
+    } else {
+      return 50;  // それ以上：永久凍土（カチカチ）
+    }
+  }
+  // ★ 硬さに応じたラベルを取得
+  String _getDifficultyLabel() {
+    if (_calculatedRequiredClicks >= 50) return "【 永久凍土 】";
+    if (_calculatedRequiredClicks >= 30) return "【 古い氷 】";
+    if (_calculatedRequiredClicks <= 8) return "【 新しい氷 】";
+    return "";
+  }
+
   // ★ オーディオプレイヤーの定義
   final AudioPlayer _sePlayer = AudioPlayer(); // 効果音用
   final AudioPlayer _bgmPlayer = AudioPlayer(); // BGM用
@@ -63,8 +83,7 @@ class _DiggingGameScreenState extends State<DiggingGameScreen> with TickerProvid
 
     _shakeController.forward(from: 0.0);
     setState(() => _clickCount++);
-    if (_clickCount >= _targetMemory!.requiredClicks) _startShatterEffect();
-  }
+if (_clickCount >= _calculatedRequiredClicks) _startShatterEffect();  }
 
   void _startShatterEffect() {
     // ★ 1. 氷が割れる音を再生
@@ -113,9 +132,9 @@ class _DiggingGameScreenState extends State<DiggingGameScreen> with TickerProvid
   }
 
   Widget _buildIceBreakingGame() {
-    bool isShattering = _shatterController.isAnimating || _clickCount >= _targetMemory!.requiredClicks;
-    int remaining = isShattering ? 0 : (_targetMemory!.requiredClicks - _clickCount).clamp(0, 1000);
-    double progress = (_clickCount / _targetMemory!.requiredClicks).clamp(0.0, 1.0);
+    bool isShattering = _shatterController.isAnimating || _clickCount >= _calculatedRequiredClicks;
+    int remaining = isShattering ? 0 : (_calculatedRequiredClicks - _clickCount).clamp(0, 1000);
+    double progress = (_clickCount / _calculatedRequiredClicks).clamp(0.0, 1.0);
     
     double photoOpacity = 0.3 + (progress * 0.7); 
     double iceOpacity = (1.0 - progress).clamp(0.0, 1.0);
@@ -128,6 +147,9 @@ class _DiggingGameScreenState extends State<DiggingGameScreen> with TickerProvid
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           const Text("思い出を掘り起こそう", style: TextStyle(color: Colors.cyan, fontWeight: FontWeight.bold, fontSize: 22, letterSpacing: 4)),
+          // ★ 難易度ラベルを表示
+          const SizedBox(height: 10),
+          Text(_getDifficultyLabel(), style: const TextStyle(color: Colors.white38, fontSize: 12, letterSpacing: 2)),
           const SizedBox(height: 40),
           AnimatedBuilder(
             animation: Listenable.merge([_shakeController, _shatterController]),
@@ -210,62 +232,117 @@ class _DiggingGameScreenState extends State<DiggingGameScreen> with TickerProvid
     );
   }
 
-  void _onFinishDigging() {
+ void _onFinishDigging() {
     final memory = _targetMemory!;
+    // コントローラーをここで定義（既存のまま）
     final TextEditingController commentController = TextEditingController();
-    widget.onDiscover(memory);
+    
     showDialog(
       context: context,
       barrierDismissible: false, 
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF0D1B3E).withOpacity(0.95),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        // キーボード表示時にダイアログがズレるのを防ぐ
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
         title: const Text("発掘に成功しました！", style: TextStyle(color: Colors.cyan, fontSize: 18)),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              IceEffects.memoryDetailContent(memory),
-              const SizedBox(height: 24),
-              const Text("この思い出に彩りを添えましょう", style: TextStyle(color: Colors.white70, fontSize: 12)),
-              const SizedBox(height: 12),
-              TextField(
-                controller: commentController,
-                maxLength: 10,
-                style: const TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  hintText: "一言メッセージ",
-                  hintStyle: const TextStyle(color: Colors.white24),
-                  filled: true,
-                  fillColor: Colors.white.withOpacity(0.05),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                  counterStyle: const TextStyle(color: Colors.cyan),
+        content: SizedBox(
+          // ダイアログの横幅を固定して安定させる
+          width: MediaQuery.of(context).size.width * 0.8,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IceEffects.memoryDetailContent(memory),
+                const SizedBox(height: 24),
+                const Text("心に触れたら、言葉と光を贈りましょう", 
+                  style: TextStyle(color: Colors.white70, fontSize: 12)),
+                const SizedBox(height: 12),
+                
+                // --- メッセージ入力欄（ここが入力場所） ---
+                TextField(
+                  controller: commentController,
+                  maxLength: 20,
+                  autofocus: false, // 自動でキーボードを出さない（必要ならtrueに）
+                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                  cursorColor: Colors.cyan,
+                  decoration: InputDecoration(
+                    hintText: "一言メッセージ（任意）",
+                    hintStyle: const TextStyle(color: Colors.white24, fontSize: 13),
+                    filled: true,
+                    fillColor: Colors.white.withOpacity(0.08), // 少し明るくして見やすく
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Colors.cyan, width: 1),
+                    ),
+                    counterStyle: const TextStyle(color: Colors.cyan, fontSize: 10),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
         actions: [
-          ElevatedButton.icon(
-            onPressed: () {
-              // ★ 2. 想いを送る時のキラキラ音を再生
-              _sePlayer.play(AssetSource('sparkle.mp3'));
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 16),
+            child: Column(
+              children: [
+                // 選択肢1: キラキラと想いを贈る
+                ElevatedButton.icon(
+                  onPressed: () async {
+                    _sePlayer.play(AssetSource('sparkle.mp3'));
+                    final commentText = commentController.text.trim();
+                    
+                    Navigator.pop(context);
+                    setState(() {
+                      _targetMemory = null;
+                      _clickCount = 0; 
+                      _shatterController.reset();
+                    });
 
-              setState(() {
-                memory.stampsCount++;
-                if (commentController.text.isNotEmpty) memory.guestComments.add(commentController.text);
-              });
-              Navigator.pop(context); 
-              setState(() {
-                _targetMemory = null; 
-                _clickCount = 0; 
-                _shatterController.reset();
-              });
-              _showCelebration(); 
-            },
-            icon: const Icon(Icons.auto_awesome),
-            label: const Text("キラキラを送して完了"),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.cyan, foregroundColor: Colors.black, minimumSize: const Size(double.infinity, 45)),
+                    // String? としてコメントを渡し、送信フラグを true に
+                    await widget.onDiscover(
+                      memory, 
+                      commentText.isNotEmpty ? commentText : null, 
+                      true
+                    );
+
+                    _showCelebration(); 
+                  },
+                  icon: const Icon(Icons.auto_awesome),
+                  label: const Text("キラキラと想いを贈る", 
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.cyan, 
+                    foregroundColor: Colors.black, 
+                    minimumSize: const Size(double.infinity, 48),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                // 選択肢2: 送らずに完了
+                TextButton(
+                  onPressed: () async {
+                    Navigator.pop(context);
+                    setState(() {
+                      _targetMemory = null;
+                      _clickCount = 0; 
+                      _shatterController.reset();
+                    });
+
+                    // コメントは送らず false で実行
+                    await widget.onDiscover(memory, null, false);
+                  },
+                  child: const Text("贈らずに自分のコレクションへ", 
+                    style: TextStyle(color: Colors.white38, fontSize: 12)),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -309,10 +386,12 @@ class _DiggingGameScreenState extends State<DiggingGameScreen> with TickerProvid
                         child: ElevatedButton.icon(
                           style: ElevatedButton.styleFrom(backgroundColor: Colors.cyan, foregroundColor: Colors.black, elevation: 8),
                           onPressed: () {
+                            final diff = _calculateDifficulty(memory.createdAt);
                             setState(() { 
                               _targetMemory = memory; 
                               _clickCount = 0; 
                               _targetIceIndex = index; 
+                              _calculatedRequiredClicks = diff;
                             });
                           },
                           icon: const Icon(Icons.hardware),
