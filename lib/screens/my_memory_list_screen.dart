@@ -1,4 +1,3 @@
-//lib/screens/my_memory_list_screen.dart
 import 'dart:io';
 import 'package:flutter/material.dart';
 import '../models/memory.dart';
@@ -7,6 +6,9 @@ class MyMemoryListScreen extends StatelessWidget {
   final List<Memory> memories;
   final Function(String) onDeleteMemory;
   final Function(Memory) onShowDetail;
+
+  // ★ ダミーの代替画像パス (lib/assets直下)
+  final String _placeholderAsset = 'lib/assets/avatar_placeholder.png';
 
   const MyMemoryListScreen({
     super.key,
@@ -22,7 +24,6 @@ class MyMemoryListScreen extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // ★ Icons.AcUnit を Icons.ac_unit に修正
             Icon(Icons.ac_unit, size: 64, color: Colors.cyan.withOpacity(0.3)),
             const SizedBox(height: 16),
             const Text(
@@ -51,6 +52,11 @@ class MyMemoryListScreen extends StatelessWidget {
   }
 
   Widget _buildMemoryItem(BuildContext context, Memory memory) {
+    // エラー時のフォールバック関数
+    Widget errorWidget(BuildContext context, Object error, StackTrace? stackTrace) {
+      return Image.asset(_placeholderAsset, fit: BoxFit.cover);
+    }
+
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
@@ -72,9 +78,18 @@ class MyMemoryListScreen extends StatelessWidget {
                 onTap: () => onShowDetail(memory),
                 child: Hero(
                   tag: 'memory-${memory.id}',
+                  // ★ ネット画像でも安全に表示するロジック
                   child: memory.photo.startsWith('http')
-                      ? Image.network(memory.photo, fit: BoxFit.cover)
-                      : Image.file(File(memory.photo), fit: BoxFit.cover),
+                      ? Image.network(
+                          memory.photo,
+                          fit: BoxFit.cover,
+                          errorBuilder: errorWidget,
+                        )
+                      : Image.file(
+                          File(memory.photo),
+                          fit: BoxFit.cover,
+                          errorBuilder: errorWidget,
+                        ),
                 ),
               ),
             ),
@@ -90,7 +105,7 @@ class MyMemoryListScreen extends StatelessWidget {
                 ),
               ),
             ),
-            // 削除ボタン（Androidでの誤操作防止のため IconButton を使用）
+            // 削除ボタン
             Positioned(
               top: 8,
               right: 8,
@@ -129,7 +144,6 @@ class MyMemoryListScreen extends StatelessWidget {
   }
 
   void _confirmDelete(BuildContext context, String id) {
-    // Androidで一般的なボトムシート形式の確認画面
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.grey[900],
