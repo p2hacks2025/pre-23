@@ -1,7 +1,6 @@
-// lib/screens/profile_screen.dart
-
 import 'dart:io';
 import 'dart:math'; 
+import 'package:flutter/foundation.dart'; // ★追加: Web判定用
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart'; 
 import '../models/user_profile.dart';
@@ -157,7 +156,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   Icon(Icons.check_circle, color: Colors.black, size: 20),
                   SizedBox(width: 8),
                   Text(
-                    "保存しました", // 下のトリガーでメッセージを変えてもOKですが、今回は固定か引数依存
+                    "保存しました", 
                     style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 14),
                   ),
                 ],
@@ -169,9 +168,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  // ★修正: Webの場合はNetworkImage、アプリの場合はFileImageを使う
   ImageProvider? _getAvatarImage(String path) {
     if (path.isEmpty) return null;
-    if (path.startsWith('http')) return NetworkImage(path);
+    // Webまたはhttpで始まるURLならNetworkImage
+    if (kIsWeb || path.startsWith('http')) {
+      return NetworkImage(path);
+    }
+    // スマホアプリならFileImage
     return FileImage(File(path));
   }
 
@@ -226,7 +230,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       return;
                     }
 
-                    // ★修正: ダイアログのナビゲーターと、親(編集画面)のナビゲーターを取得
+                    // ダイアログのナビゲーターと、親(編集画面)のナビゲーターを取得
                     final navigator = Navigator.of(ctx); // パスワード変更ダイアログ用
                     final parentNavigator = Navigator.of(parentContext); // プロフィール編集ダイアログ用
 
@@ -236,7 +240,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       // 1. パスワード変更ダイアログを閉じる
                       navigator.pop(); 
                       
-                      // 2. ★追加: 親の「プロフィール編集ダイアログ」も閉じる
+                      // 2. 親の「プロフィール編集ダイアログ」も閉じる
                       if (parentNavigator.canPop()) {
                         parentNavigator.pop();
                       }

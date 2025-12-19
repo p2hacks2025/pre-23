@@ -1,8 +1,7 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart'; // ★追加: Web判定用
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-// 同じフォルダにある場合
-//lib/screens/create_memory_screen.dart
 
 class CreateMemoryScreen extends StatefulWidget {
   // ★ starRatingを引数に追加するように修正
@@ -162,12 +161,20 @@ class _CreateMemoryScreenState extends State<CreateMemoryScreen> {
                       children: [
                         ClipRRect(
                           borderRadius: BorderRadius.circular(14),
-                          child: Image.file(
-                            File(imagePath),
-                            fit: BoxFit.cover,
-                            width: double.infinity,
-                            height: double.infinity,
-                          ),
+                          // ★修正: Webの場合はImage.network、アプリの場合はImage.fileを使う
+                          child: kIsWeb
+                              ? Image.network(
+                                  imagePath,
+                                  fit: BoxFit.cover,
+                                  width: double.infinity,
+                                  height: double.infinity,
+                                )
+                              : Image.file(
+                                  File(imagePath),
+                                  fit: BoxFit.cover,
+                                  width: double.infinity,
+                                  height: double.infinity,
+                                ),
                         ),
                         Positioned(
                           top: 8,
