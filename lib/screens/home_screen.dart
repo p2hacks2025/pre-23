@@ -2,7 +2,9 @@
 
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart'; // kIsWeb用
+import 'package:flutter/foundation.dart'; 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart'; 
 import '../models/memory.dart';
 import '../models/user_profile.dart';
 import '../services/api_service.dart';
@@ -81,8 +83,54 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       builder: (context) => ProfileScreen(
         profile: _userProfile!,
         onClose: () => Navigator.pop(context),
-        onSave: (updated) {
-          setState(() => _userProfile = updated);
+        
+        onSave: (updatedProfile) async {
+          // ★修正ポイント: 非同期処理の前にMessengerを確保する
+          final messenger = ScaffoldMessenger.of(context);
+
+          try {
+            String finalAvatarUrl = updatedProfile.avatar;
+
+            // 画像アップロード処理
+            if (finalAvatarUrl.isNotEmpty && !finalAvatarUrl.startsWith('http')) {
+              final file = File(finalAvatarUrl);
+              final storageRef = FirebaseStorage.instance
+                  .ref()
+                  .child('user_avatars')
+                  .child('${updatedProfile.id}_${DateTime.now().millisecondsSinceEpoch}.jpg');
+
+              await storageRef.putFile(file);
+              finalAvatarUrl = await storageRef.getDownloadURL();
+            }
+
+            // 1. Firestore更新
+            await FirebaseFirestore.instance
+                .collection('userProfiles')
+                .doc(updatedProfile.id)
+                .update({
+              'username': updatedProfile.username,
+              'bio': updatedProfile.bio,
+              'avatar': finalAvatarUrl,
+            });
+
+            // 2. ホーム画面側の状態も更新
+            if (mounted) {
+              setState(() {
+                _userProfile = UserProfile(
+                  id: updatedProfile.id,
+                  username: updatedProfile.username,
+                  bio: updatedProfile.bio,
+                  avatar: finalAvatarUrl, 
+                );
+              });
+            }
+          } catch (e) {
+            debugPrint("プロフィール更新エラー: $e");
+            // ★確保したmessengerを使って表示
+            messenger.showSnackBar(
+              SnackBar(content: Text('更新に失敗しました: $e')),
+            );
+          }
         },
       ),
     );
@@ -105,7 +153,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           initialAuthor: _userProfile!.username,
           onCancel: () => Navigator.pop(ctx),
           onSubmit: (photoPath, text, author, starRating) async {
-            // 非同期処理の前にNavigatorやMessengerを確保
+            // ★修正: NavigatorとMessengerを事前に確保
             final navigator = Navigator.of(ctx);
             final messenger = ScaffoldMessenger.of(ctx);
 
@@ -117,7 +165,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               starRating: starRating,
             );
             
-            // 画面がまだ存在しているかチェックしてから閉じる
             if (navigator.canPop()) {
               navigator.pop();
               messenger.showSnackBar(
@@ -139,7 +186,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           IceEffects.memoryDetailContent(memory),
           const SizedBox(height: 20),
           const Divider(color: Colors.white24),
-           Row(
+          Row(
             children: [
               const Icon(Icons.stars, color: Colors.amber, size: 20),
               const SizedBox(width: 8),
@@ -172,7 +219,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       margin: const EdgeInsets.only(bottom: 8),
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       decoration: BoxDecoration(
-                        // withOpacity -> withValues (警告対応済み)
                         color: Colors.white.withValues(alpha: 0.05),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(color: Colors.cyan.withValues(alpha: 0.1)),
@@ -190,7 +236,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-  // ★ SVG対策: URLを修正するヘルパーメソッド
   String _sanitizeUrl(String url) {
     if (url.contains('dicebear.com') && url.contains('svg')) {
       return url.replaceAll('svg', 'png');
@@ -214,7 +259,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 radius: 16, 
                 backgroundColor: Colors.white24,
                 backgroundImage: _userProfile!.avatar.startsWith('http') 
-                    // ★ SVG対策: ここでURLをサニタイズ
                     ? NetworkImage(_sanitizeUrl(_userProfile!.avatar)) 
                     : null,
                 child: _userProfile!.avatar.isEmpty ? const Icon(Icons.person, size: 20) : null,
@@ -315,7 +359,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       child: ClipRRect(
                         borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
                         child: Image(
-                          // ★ SVG対策: ヘルパーメソッド経由で呼び出し
                           image: _getImage(memory.photo), 
                           fit: BoxFit.cover, 
                           width: double.infinity,
@@ -392,7 +435,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   ImageProvider _getImage(String path) {
     if (path.isEmpty) return const NetworkImage('https://via.placeholder.com/150');
     
-    // ★ SVG対策: ここでもURLをサニタイズ
     String safePath = _sanitizeUrl(path);
 
     if (safePath.startsWith('http') || kIsWeb) return NetworkImage(safePath);
