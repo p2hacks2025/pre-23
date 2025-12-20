@@ -82,6 +82,7 @@ class IceEffects {
     );
   }
 
+  // ★ 修正ポイント：投稿者の表示をよりコンセプト（記憶のプレゼント）に寄せる
   static Widget memoryDetailContent(Memory memory, {bool showReactions = false, VoidCallback? onReaction}) {
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -97,31 +98,53 @@ class IceEffects {
           ),
         ),
         const SizedBox(height: 16),
-        Text(memory.text, style: const TextStyle(color: Colors.white, fontSize: 16, height: 1.5)),
-        const SizedBox(height: 12),
+        Text(
+          memory.text, 
+          style: const TextStyle(color: Colors.white, fontSize: 16, height: 1.5, letterSpacing: 0.5)
+        ),
+        const SizedBox(height: 20),
         Row(
           children: [
-            const Icon(Icons.person, color: Colors.cyan, size: 14),
-            const SizedBox(width: 4),
-            Text(memory.author, style: const TextStyle(color: Colors.cyan, fontSize: 12)),
+            // 投稿者の表示を「誰か」から「記憶の主」というニュアンスに
+            const Icon(Icons.auto_awesome_motion, color: Colors.cyanAccent, size: 14),
+            const SizedBox(width: 6),
+            Text(
+              "この記憶の主: ${memory.author}", 
+              style: const TextStyle(color: Colors.cyanAccent, fontSize: 12, fontWeight: FontWeight.w500)
+            ),
             const Spacer(),
-            const Icon(Icons.blur_on, color: Colors.white38, size: 14),
+            const Icon(Icons.history, color: Colors.white38, size: 14),
             const SizedBox(width: 4),
-            Text('${memory.digCount} Digs', style: const TextStyle(color: Colors.white38, fontSize: 11)),
+            Text(
+              '${memory.digCount}回 発掘されました', 
+              style: const TextStyle(color: Colors.white38, fontSize: 11)
+            ),
           ],
         ),
         if (showReactions) ...[
-          const Divider(color: Colors.white10, height: 30),
-          const Center(child: Text("想いを送る", style: TextStyle(color: Colors.cyan, fontSize: 12, fontWeight: FontWeight.bold))),
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 20),
+            child: Divider(color: Colors.white10, height: 1),
+          ),
+          const Center(
+            child: Text(
+              "この記憶に、光の粒を贈る", 
+              style: TextStyle(color: Colors.cyanAccent, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 2)
+            )
+          ),
           const SizedBox(height: 15),
           Center(
             child: InkWell(
               onTap: onReaction,
               borderRadius: BorderRadius.circular(50),
               child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withOpacity(0.05)),
-                child: const Text("✨", style: TextStyle(fontSize: 45)),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle, 
+                  color: Colors.cyan.withOpacity(0.1),
+                  border: Border.all(color: Colors.cyan.withOpacity(0.3))
+                ),
+                child: const Text("✨", style: TextStyle(fontSize: 40)),
               ),
             ),
           ),
@@ -135,6 +158,11 @@ class SparklePoint {
   double x = Random().nextDouble();
   double y = Random().nextDouble();
   double size = Random().nextDouble() * 10 + 6;
-  Color color = [Colors.cyanAccent, Colors.white, Colors.blueAccent, Colors.yellowAccent][Random().nextInt(4)];
+  Color color = [
+    Colors.cyanAccent, 
+    Colors.white, 
+    Colors.blueAccent, 
+    Colors.yellowAccent
+  ][Random().nextInt(4)];
   double speed = Random().nextDouble() * 0.3 + 0.2;
 }

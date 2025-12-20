@@ -28,6 +28,8 @@ class _CreateMemoryScreenState extends State<CreateMemoryScreen> {
   
   // ★ キラキラ度の状態をこちらで管理
   int _starRating = 1;
+  // ★ 追加: 処理中かどうかを管理するフラグ
+  bool _isSubmitting = false;
 
   Future<void> _pickImage() async {
     try {
@@ -51,23 +53,41 @@ class _CreateMemoryScreenState extends State<CreateMemoryScreen> {
     _authorController = TextEditingController(text: widget.initialAuthor ?? '');
   }
 
-  void _submit() {
+  Future<void> _submit() async {
+    if (_isSubmitting) return; // 二重送信防止
+
     if (_selectedImage != null &&
         _textController.text.trim().isNotEmpty &&
         _authorController.text.trim().isNotEmpty) {
-      // ★ 引数に _starRating を追加
-      widget.onSubmit(
-        _selectedImage!.path,
-        _textController.text.trim(),
-        _authorController.text.trim(),
-        _starRating,
-      );
-      setState(() {
-        _selectedImage = null;
-        _textController.clear();
-        _authorController.clear();
-        _starRating = 1; // リセット
-      });
+      
+      setState(() => _isSubmitting = true); // ローディング開始
+
+      try {
+        // 保存処理の完了を待つ
+        await widget.onSubmit(
+          _selectedImage!.path,
+          _textController.text.trim(),
+          _authorController.text.trim(),
+          _starRating,
+        );
+
+        if (mounted) {
+          setState(() {
+            _selectedImage = null;
+            _textController.clear();
+            _authorController.clear();
+            _starRating = 1;
+            _isSubmitting = false;
+          });
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() => _isSubmitting = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('エラーが発生しました: $e')),
+          );
+        }
+      }
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('すべてのフィールドを入力してください')),
@@ -290,7 +310,7 @@ class _CreateMemoryScreenState extends State<CreateMemoryScreen> {
                 const SizedBox(width: 16),
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: _submit,
+                    onPressed: _isSubmitting ? null : _submit,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.cyan,
                       padding: const EdgeInsets.symmetric(vertical: 16),
@@ -298,10 +318,22 @@ class _CreateMemoryScreenState extends State<CreateMemoryScreen> {
                         borderRadius: BorderRadius.circular(16),
                       ),
                     ),
-                    child: const Text(
-                      '封印する',
-                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                    ),
+                    child: _isSubmitting
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text(
+                            '封印する',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                   ),
                 ),
               ],
@@ -311,6 +343,7 @@ class _CreateMemoryScreenState extends State<CreateMemoryScreen> {
       ),
     );
   }
+
 
   @override
   void dispose() {
