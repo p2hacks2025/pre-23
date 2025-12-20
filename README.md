@@ -37,8 +37,13 @@ Gleam (グリーム)
 - 誰が投稿したのかは、発掘してからでないとわからないようにした。これは、だれが投稿したのかではなく、その投稿にある記憶、思い出はど
 　ういうものなのかをフォーカスさせることで、過剰なコミュニケーションをなくし、純粋ないいねやコメントが生まれるように設計した。
 
-## スクリーンショット(任意)
-開発体制・役割分担
+## スクリーンショット
+<img width="413" height="863" alt="Android Emulator - Pixel_7a_5554 2025_12_20 11_15_03" src="https://github.com/user-attachments/assets/5a49c6a5-8346-4402-9a53-48d8b6927873" />
+<img width="413" height="863" alt="Android Emulator - Pixel_7a_5554 2025_12_20 11_14_01" src="https://github.com/user-attachments/assets/b7a2a6f9-a927-4697-98c8-79e2ef3eae26" />
+<img width="413" height="863" alt="Android Emulator - Pixel_7a_5554 2025_12_20 11_12_52" src="https://github.com/user-attachments/assets/0b780a48-3bf3-485b-bae7-1b958af44a46" />
+
+
+##　開発体制・役割分担
 - 憂→PM，FrontEnd, BackEnd、発表資料・スライドの校正校閲
 - セツナ→FrontEnd, BackEnd
 - ばち→Check, Design、発表資料作成、アプリアイコン作成、テスター
