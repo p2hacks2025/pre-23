@@ -71,30 +71,40 @@ class _TopScreenState extends State<TopScreen> with SingleTickerProviderStateMix
                   
                   const SizedBox(height: 40),
                   
-                  // タイトル：思い出が凍っているイメージ（文字間隔を広く）
-                  const Text(
-                    "FROZEN MEMORY",
-                    style: TextStyle(
-                      fontSize: 40,
-                      fontWeight: FontWeight.w200, // 細字で透明感を演出
-                      color: Colors.white,
-                      letterSpacing: 10.0,
-                      shadows: [
-                        Shadow(color: Colors.cyanAccent, blurRadius: 20),
-                      ],
+                  // ★ 修正：タイトルを中央揃え＆視覚補正
+                  Container(
+                    // letterSpacingが10なので、左にも10足すと視覚的にど真ん中になります
+                    padding: const EdgeInsets.only(left: 10.0), 
+                    child: const Text(
+                      "FROZEN MEMORY",
+                      textAlign: TextAlign.center, // ★ 中央揃え指定
+                      style: TextStyle(
+                        fontSize: 40,
+                        fontWeight: FontWeight.w200, // 細字で透明感を演出
+                        color: Colors.white,
+                        letterSpacing: 10.0,
+                        shadows: [
+                          Shadow(color: Colors.cyanAccent, blurRadius: 20),
+                        ],
+                      ),
                     ),
                   ),
                   
                   const SizedBox(height: 16),
                   
-                  // キャッチコピー
-                  Text(
-                    "思い出は、光となって凍土に眠る。",
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.white.withOpacity(0.5),
-                      letterSpacing: 4.0,
-                      fontStyle: FontStyle.italic,
+                  // ★ 修正：キャッチコピーを中央揃え＆視覚補正
+                  Container(
+                    // letterSpacingが4なので、左にも4足してバランスを取る
+                    padding: const EdgeInsets.only(left: 4.0),
+                    child: Text(
+                      "思い出は、光となって凍土に眠る。",
+                      textAlign: TextAlign.center, // ★ 中央揃え指定
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.white.withOpacity(0.5),
+                        letterSpacing: 4.0,
+                        fontStyle: FontStyle.italic,
+                      ),
                     ),
                   ),
                   
@@ -199,7 +209,6 @@ class _TopScreenState extends State<TopScreen> with SingleTickerProviderStateMix
   }
 
   void _showSignIn(BuildContext context) {
-    // 既存の機能を維持
     showDialog(
       context: context,
       barrierColor: Colors.black.withOpacity(0.7),
