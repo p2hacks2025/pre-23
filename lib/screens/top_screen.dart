@@ -1,165 +1,220 @@
-import 'dart:math'; // 粒子エフェクト用に追加
+import 'dart:math';
+import 'dart:ui'; // ぼかしエフェクト（氷の質感）に必要
 import 'package:flutter/material.dart';
 import 'sign_in_screen.dart';
 import 'home_screen.dart';
 
-class TopScreen extends StatelessWidget {
+class TopScreen extends StatefulWidget {
   const TopScreen({super.key});
+
+  @override
+  State<TopScreen> createState() => _TopScreenState();
+}
+
+class _TopScreenState extends State<TopScreen> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    // 輝きや粒子のゆらぎを制御する無限アニメーション
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 20),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF000000), // 漆黒
-              Color(0xFF0D1B3E), // 凍土の深い青
-            ],
+      body: Stack(
+        children: [
+          // 1. 背景：深い凍土のグラデーション
+          Container(
+            decoration: const BoxDecoration(
+              gradient: RadialGradient(
+                center: Alignment(0, -0.3),
+                radius: 1.5,
+                colors: [
+                  Color(0xFF1E3A5F), // 氷の奥底の青
+                  Color(0xFF000000), // 完全な静寂
+                ],
+              ),
+            ),
           ),
-        ),
-        child: SafeArea(
-          child: Stack(
-            children: [
-              // 背景の粒子エフェクト（機能を具体化：20個の星をランダム配置）
-              ...List.generate(20, (index) => _buildParticle(context, index)),
 
-              // メインコンテンツ
-              Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Spacer(flex: 2),
-                    
-                    // アプリロゴ
-                    Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.cyan.withOpacity(0.1),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.cyan.withOpacity(0.2),
-                            blurRadius: 40,
-                            spreadRadius: 10,
-                          ),
-                        ],
-                      ),
-                      child: const Icon(Icons.ac_unit, size: 80, color: Colors.cyan),
-                    ),
-                    const SizedBox(height: 30),
-                    
-                    // タイトルテキスト
-                    const Text(
-                      "Frozen Memory",
-                      style: TextStyle(
-                        fontSize: 36,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                        letterSpacing: 3.0,
-                        fontFamily: 'Serif',
-                        shadows: [
-                          Shadow(color: Colors.cyan, blurRadius: 20, offset: Offset(0, 0)),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    
-                    // キャッチコピー
-                    Text(
-                      "記憶は、凍土に眠る。",
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.white.withOpacity(0.6),
-                        letterSpacing: 4.0,
-                      ),
-                    ),
-                    
-                    const Spacer(flex: 3),
+          // 2. 粒子エフェクト：氷の粉（ダイヤモンドダスト）
+          AnimatedBuilder(
+            animation: _controller,
+            builder: (context, child) {
+              return Stack(
+                children: List.generate(40, (index) => _buildSparkle(context, index)),
+              );
+            },
+          ),
 
-                    // 開始ボタン
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 40),
-                      child: OutlinedButton(
-                        onPressed: () => _showSignIn(context),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.cyan,
-                          side: const BorderSide(color: Colors.cyan, width: 1),
-                          padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 30),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(30),
-                          ),
-                          backgroundColor: Colors.black.withOpacity(0.3),
-                        ),
-                        child: const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              "探索を始める",
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 2.0,
-                              ),
-                            ),
-                            SizedBox(width: 12),
-                            Icon(Icons.arrow_forward, size: 20),
-                          ],
-                        ),
-                      ),
+          // 3. メインコンテンツ
+          SafeArea(
+            child: Center(
+              child: Column(
+                children: [
+                  const Spacer(flex: 3),
+                  
+                  // アプリロゴ：氷の結晶と光輪
+                  _buildIceCrystalLogo(),
+                  
+                  const SizedBox(height: 40),
+                  
+                  // タイトル：思い出が凍っているイメージ（文字間隔を広く）
+                  const Text(
+                    "FROZEN MEMORY",
+                    style: TextStyle(
+                      fontSize: 40,
+                      fontWeight: FontWeight.w200, // 細字で透明感を演出
+                      color: Colors.white,
+                      letterSpacing: 10.0,
+                      shadows: [
+                        Shadow(color: Colors.cyanAccent, blurRadius: 20),
+                      ],
                     ),
-                    const SizedBox(height: 60),
-                  ],
+                  ),
+                  
+                  const SizedBox(height: 16),
+                  
+                  // キャッチコピー
+                  Text(
+                    "思い出は、光となって凍土に眠る。",
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.white.withOpacity(0.5),
+                      letterSpacing: 4.0,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                  
+                  const Spacer(flex: 4),
+
+                  // 4. 開始ボタン：氷を削り出したような「グラスモーフィズム」デザイン
+                  _buildIceButton(context),
+                  
+                  const SizedBox(height: 60),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 氷の結晶ロゴ：複数の光を重ねて「キラキラ」を表現
+  Widget _buildIceCrystalLogo() {
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        // 背後の光輪
+        ...List.generate(2, (i) => Transform.rotate(
+          angle: _controller.value * pi * (i == 0 ? 1 : -1),
+          child: Container(
+            width: 140, height: 140,
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.cyan.withOpacity(0.1), width: 0.5),
+              shape: BoxShape.circle,
+            ),
+          ),
+        )),
+        // 結晶アイコン
+        const Icon(Icons.ac_unit, size: 80, color: Colors.white),
+        Icon(Icons.ac_unit, size: 85, color: Colors.cyanAccent.withOpacity(0.3)),
+      ],
+    );
+  }
+
+  // 氷のボタン：背景をぼかすことで「氷の質感」を出す
+  Widget _buildIceButton(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(30),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15), // 強いぼかし
+        child: Container(
+          width: 280,
+          height: 64,
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(30),
+            border: Border.all(color: Colors.white.withOpacity(0.2), width: 0.8),
+          ),
+          child: InkWell(
+            onTap: () => _showSignIn(context),
+            child: const Center(
+              child: Text(
+                "探索を始める",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w300,
+                  letterSpacing: 6.0,
                 ),
               ),
-            ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  // 機能を具体化した粒子エフェクト
-  Widget _buildParticle(BuildContext context, int index) {
-    final random = Random(index); // インデックスをシードにして配置を固定
-    final top = random.nextDouble() * MediaQuery.of(context).size.height;
-    final left = random.nextDouble() * MediaQuery.of(context).size.width;
-    final size = random.nextDouble() * 3;
+  // キラキラと舞う粒子（ダイヤモンドダスト）
+  Widget _buildSparkle(BuildContext context, int index) {
+    final random = Random(index);
+    final size = random.nextDouble() * 3 + 10;
+    final baseTop = random.nextDouble() * MediaQuery.of(context).size.height;
+    final baseLeft = random.nextDouble() * MediaQuery.of(context).size.width;
+    
+    // アニメーションに合わせてゆっくりゆらぐ
+    final drift = sin(_controller.value * pi * 2 + index) * 20;
 
     return Positioned(
-      top: top,
-      left: left,
-      child: Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(random.nextDouble() * 0.5),
-          shape: BoxShape.circle,
+      top: baseTop + drift,
+      left: baseLeft + (drift * 0.5),
+      child: Opacity(
+        opacity: (sin(_controller.value * pi * 2 + index) + 1) / 2 * 0.6, // 明滅
+        child: Container(
+          width: size, height: size,
+          decoration: BoxDecoration(
+            color: index % 3 == 0 ? Colors.cyanAccent : Colors.white,
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(color: Colors.white.withOpacity(0.8), blurRadius: 5),
+            ],
+          ),
         ),
       ),
     );
   }
 
   void _showSignIn(BuildContext context) {
+    // 既存の機能を維持
     showDialog(
       context: context,
-      barrierColor: Colors.transparent,
+      barrierColor: Colors.black.withOpacity(0.7),
       builder: (context) => SignInScreen(
         onCancel: () => Navigator.pop(context),
         onSignedIn: (profile) {
-          // ★ 修正：ログイン成功時、履歴をすべて消してホーム画面へ
-          // これにより、ログアウト時に安全にTopScreenへ戻れるようになります
           Navigator.of(context).pushAndRemoveUntil(
             PageRouteBuilder(
-              pageBuilder: (context, animation, secondaryAnimation) => const HomeScreen(),
-              transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                return FadeTransition(opacity: animation, child: child);
+              pageBuilder: (context, anim, secAnim) => const HomeScreen(),
+              transitionsBuilder: (context, anim, secAnim, child) {
+                return FadeTransition(opacity: anim, child: child);
               },
-              transitionDuration: const Duration(milliseconds: 1000),
+              transitionDuration: const Duration(milliseconds: 1500),
             ),
-            (route) => false, // スタックを空にする
+            (route) => false,
           );
         },
       ),
