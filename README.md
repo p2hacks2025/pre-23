@@ -43,7 +43,7 @@ Gleam (グリーム)
 <img width="413" height="863" alt="Android Emulator - Pixel_7a_5554 2025_12_20 11_12_52" src="https://github.com/user-attachments/assets/0b780a48-3bf3-485b-bae7-1b958af44a46" />
 
 
-##　開発体制・役割分担
+###　開発体制・役割分担
 - 憂→PM，FrontEnd, BackEnd、発表資料・スライドの校正校閲
 - セツナ→FrontEnd, BackEnd
 - ばち→Check, Design、発表資料作成、アプリアイコン作成、テスター
@@ -60,7 +60,7 @@ Gleam (グリーム)
 AIが全面に書いたコードではあるが、ある程度動くようになった段階で人間にもテストし、UI,UXの改善案を思考発話法で。まとめた。
 また、AIが書いたコードは過去の情報から拾ってくるため、最新の脆弱性に対応できていない場合があることを懸念して、MobSUBによるセキュリティ診断、ペネトレーションテストを行い、開発して終わりの政策ではなく、長く使ってもらえるような開発を行った。
 
-## 開発技術
+### 開発技術
 
 - 利用したプログラミング言語　TypeScript, Dart, CSS, CMake, C++, Swift
 - 利用したフレームワーク/ライブラリ　Flutter, Android Studio, MOBSUB
