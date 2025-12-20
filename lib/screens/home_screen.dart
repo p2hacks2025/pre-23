@@ -1,3 +1,4 @@
+import 'dart:math'; // これを追加！
 import 'dart:io';
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -34,6 +35,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   
   late PageController _pageController;
   late AnimationController _shimmerController;
+  // ★ 追加: 背景のキラキラ用コントローラー
+  late AnimationController _bgController;
   
   StreamSubscription<UserProfile?>? _authSubscription;
 
@@ -46,6 +49,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       vsync: this,
       duration: const Duration(seconds: 2),
     )..repeat(reverse: true);
+    // ★ 追加: 背景アニメーション（20秒で1周）
+    _bgController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 20),
+    )..repeat();
 
     _listenToAuthChanges();
   }
@@ -77,6 +85,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     _authSubscription?.cancel();
     _pageController.dispose();
     _shimmerController.dispose();
+    _bgController.dispose(); // ★ 破棄を忘れずに
     super.dispose();
   }
 
@@ -247,12 +256,86 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     }
 
     return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        title: const Text('Frozen Memory', style: TextStyle(color: Colors.white, fontFamily: 'Serif', fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.transparent,
-        automaticallyImplyLeading: false,
-        actions: [
+      // 背景は Stack で描画するため、Scaffold 自体は透明に
+      backgroundColor: Colors.transparent, 
+      extendBody: true, // ナビゲーションバーの裏まで背景を広げる
+      body: Stack(
+        children: [
+          // 1. 背景：深い凍土のグラデーション
+          Container(
+            decoration: const BoxDecoration(
+              gradient: RadialGradient(
+                center: Alignment(0, -0.3),
+                radius: 1.5,
+                colors: [Color(0xFF1E3A5F), Colors.black],
+              ),
+            ),
+          ),
+
+          // 2. キラキラ粒子エフェクト（AnimatedBuilderで動かす）
+          AnimatedBuilder(
+            animation: _bgController,
+            builder: (context, child) {
+              return Stack(
+                children: List.generate(35, (index) => _buildBgSparkle(context, index)),
+              );
+            },
+          ),
+
+          // 3. メインコンテンツ
+          SafeArea(
+            bottom: false,
+            child: _isLoading || _userProfile == null
+              ? const Center(child: CircularProgressIndicator(color: Colors.cyan))
+              : Column(
+                  children: [
+                    // AppBar の代わり
+                    _buildCustomAppBar(), 
+                    Expanded(
+                      child: PageView(
+                        controller: _pageController,
+                        onPageChanged: (index) {
+                          setState(() => _currentView = CurrentView.values[index]);
+                        },
+                        children: [
+                          _buildDiscoveryView(),
+                          _buildHomeView(),
+                          _buildAchievementsView(),
+                        ],
+                      ),
+                    ),
+                    AppNavigationBar(
+                      currentView: _currentView,
+                      onViewChanged: (view) {
+                        setState(() => _currentView = view);
+                        _pageController.animateToPage(view.index,
+                            duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+                      },
+                    ),
+                  ],
+                ),
+          ),
+        ],
+      ),
+      floatingActionButton: _currentView == CurrentView.home 
+        ? FloatingActionButton(
+            onPressed: _showCreateModal, 
+            backgroundColor: Colors.cyan, 
+            child: const Icon(Icons.add, color: Colors.black)
+          ) 
+        : null,
+    );
+  }
+
+  Widget _buildCustomAppBar() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          const Text('Frozen Memory', 
+            style: TextStyle(color: Colors.white, fontSize: 20, fontFamily: 'Serif', fontWeight: FontWeight.bold)
+          ),
           if (_userProfile != null)
             IconButton(
               onPressed: _openProfile, 
@@ -265,42 +348,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 child: _userProfile!.avatar.isEmpty ? const Icon(Icons.person, size: 20) : null,
               )
             ),
-          const SizedBox(width: 8),
         ],
       ),
-      body: _isLoading || _userProfile == null
-        ? const Center(child: CircularProgressIndicator(color: Colors.cyan)) 
-        : Column(
-            children: [
-              Expanded(
-                child: PageView(
-                  controller: _pageController,
-                  onPageChanged: (index) {
-                    setState(() => _currentView = CurrentView.values[index]);
-                  },
-                  children: [
-                    _buildDiscoveryView(),     
-                    _buildHomeView(),          
-                    _buildAchievementsView(),  
-                  ],
-                ),
-              ),
-              AppNavigationBar(
-                currentView: _currentView, 
-                onViewChanged: (view) {
-                  setState(() => _currentView = view);
-                  _pageController.animateToPage(view.index, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
-                },
-              ),
-            ],
-          ),
-      floatingActionButton: _currentView == CurrentView.home 
-        ? FloatingActionButton(
-            onPressed: _showCreateModal, 
-            backgroundColor: Colors.cyan, 
-            child: const Icon(Icons.add, color: Colors.black)
-          ) 
-        : null,
     );
   }
 
@@ -483,6 +532,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     return AchievementsScreen();
   }
 
+
+
   ImageProvider _getImage(String path) {
     if (path.isEmpty) return const AssetImage('assets/images/avatar_placeholder.png'); 
     if (kIsWeb || path.startsWith('http') || path.startsWith('https') || path.startsWith('blob:')) {
@@ -490,4 +541,43 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     }
     return FileImage(File(path));
   }
+
+  // --- キラキラの粒子ひとつひとつを描画するメソッド ---
+  Widget _buildBgSparkle(BuildContext context, int index) {
+    final random = Random(index);
+    // 粒子の大きさをランダムに設定 (2px 〜 4px)
+    final size = random.nextDouble() * 2 + 10; 
+    // 画面上の初期位置をランダムに設定
+    final baseTop = random.nextDouble() * MediaQuery.of(context).size.height;
+    final baseLeft = random.nextDouble() * MediaQuery.of(context).size.width;
+    
+    // 時間経過とともに上下左右に揺らす計算
+    // _bgController.value は 0.0 〜 1.0 の間で変化します
+    final drift = sin(_bgController.value * pi * 2 + index) * 15;
+
+    return Positioned(
+      top: baseTop + drift,
+      left: baseLeft + (drift * 0.5),
+      child: Opacity(
+        // sin関数を使って、ふわふわと明滅させる
+        opacity: (sin(_bgController.value * pi * 2 + index) + 1) / 2 * 0.4,
+        child: Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            // 3つに1つは水色、それ以外は白にする
+            color: index % 3 == 0 ? Colors.cyanAccent : Colors.white,
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.white.withOpacity(0.5),
+                blurRadius: 4,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
+
