@@ -11,6 +11,7 @@ import '../services/auth_service.dart';
 
 class ProfileScreen extends StatefulWidget {
   final UserProfile profile;
+  final bool isGuest; // ★ これを追加！
   final Future<void> Function(UserProfile) onSave;
   final VoidCallback onClose;
 
@@ -33,6 +34,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final AuthService _authService = AuthService();
   // ★ APIサービスを初期化
   final ApiService _api = ApiService(); 
+  // ★ これを追加：クラス全体で使えるようにここで定義します
+  late TextEditingController _usernameController;
+  late TextEditingController _bioController;
 
   final String _placeholderAsset = 'lib/assets/avatar_placeholder.png';
 

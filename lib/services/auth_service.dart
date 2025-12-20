@@ -3,12 +3,13 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/user_profile.dart';
 
 class AuthService {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  // ★ 解決策: インスタンス変数を正しく定義する
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _db = FirebaseFirestore.instance; // 名前を _db に統一
   
   static const String _userProfilesCollection = 'userProfiles';
 
-  // ★追加: ログイン状態の変化をリアルタイムで流す (機能を減らさず追加)
-  // これにより、ログイン・ログアウトした瞬間に他の画面がそれを検知できます
+  // ログイン状態の変化をリアルタイムで流す
   Stream<UserProfile?> authStateChanges() {
     return _auth.authStateChanges().asyncMap((user) async {
       if (user == null) return null;
@@ -17,7 +18,7 @@ class AuthService {
     });
   }
 
-  // 1. 現在のユーザー取得 (既存)
+  // 1. 現在のユーザー取得
   Future<UserProfile> getCurrentUser() async {
     final user = _auth.currentUser;
     if (user == null) {
@@ -26,7 +27,7 @@ class AuthService {
     return await _fetchProfileFromFirestore(user.uid);
   }
 
-  // 2. メールとパスワードでログイン (既存)
+  // 2. メールとパスワードでログイン
   Future<UserProfile> signInWithEmail(String email, String password) async {
     final credential = await _auth.signInWithEmailAndPassword(
       email: email, 
@@ -35,7 +36,7 @@ class AuthService {
     return await _fetchProfileFromFirestore(credential.user!.uid);
   }
 
-  // 3. 新規登録 (既存)
+  // 3. 新規登録
   Future<UserProfile> signUpWithEmail({
     required String email, 
     required String password, 
@@ -53,12 +54,12 @@ class AuthService {
     );
   }
 
-  // 4. サインアウト (既存)
+  // 4. サインアウト
   Future<void> signOut() async {
     await _auth.signOut();
   }
 
-  // 5. パスワード変更 (既存)
+  // 5. パスワード変更
   Future<void> updatePassword(String newPassword) async {
     final user = _auth.currentUser;
     if (user != null) {
@@ -68,7 +69,7 @@ class AuthService {
     }
   }
 
-  // --- 内部ヘルパーメソッド (既存) ---
+  // --- 内部ヘルパーメソッド ---
 
   Future<UserProfile> _fetchProfileFromFirestore(String uid) async {
     final doc = await _db.collection(_userProfilesCollection).doc(uid).get();

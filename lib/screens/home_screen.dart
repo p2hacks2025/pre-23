@@ -98,6 +98,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       backgroundColor: Colors.transparent,
       builder: (context) => ProfileScreen(
         profile: _userProfile!,
+        isGuest: false, // ★ ここを追加（自分のプロフィールの場合は false）
         onClose: () => Navigator.pop(context),
         onSave: (updatedProfile) async {
           final messenger = ScaffoldMessenger.of(context);
@@ -471,8 +472,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
   // ★ ログアウト処理
   Future<void> _handleSignOut() async {
-    await _authService.signOut();
-    await _loadData();
+    await _auth.signOut(); // _authService から _auth に修正
     
     if (mounted) {
        Navigator.of(context).pop(); // プロフィール画面を閉じる

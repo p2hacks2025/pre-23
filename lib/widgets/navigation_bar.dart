@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../screens/home_screen.dart';
+
 // lib/widgets/navigation_bar.dart
 class AppNavigationBar extends StatelessWidget {
   final CurrentView currentView;
@@ -13,26 +14,25 @@ class AppNavigationBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 現在のViewからインデックスを逆算
+    // 現在のViewからインデックスを逆算（アニメーション等の制御用）
     int currentIndex = 0;
     switch (currentView) {
-      case CurrentView.home:
-      case CurrentView.create:
+      case CurrentView.discovery:
         currentIndex = 0;
         break;
-      case CurrentView.dig:
+      case CurrentView.home:
         currentIndex = 1;
         break;
-      // コレクション削除に伴い、実績を 2 に繰り上げ
       case CurrentView.achievements:
         currentIndex = 2;
         break;
     }
 
     return Container(
+      // 背景を少し透過させてキラキラが見えるようにする
       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.5),
+        color: Colors.black.withOpacity(0.3), // 0.5から0.3に下げるとより綺麗です
         border: const Border(top: BorderSide(color: Colors.white10, width: 0.5)),
       ),
       child: Row(
@@ -49,6 +49,7 @@ class AppNavigationBar extends StatelessWidget {
   Widget _buildNavButton(IconData icon, CurrentView view, String label) {
     final isSelected = currentView == view;
     return GestureDetector(
+      behavior: HitTestBehavior.opaque, // タップ反応を良くする
       onTap: () => onViewChanged(view),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -58,6 +59,7 @@ class AppNavigationBar extends StatelessWidget {
             color: isSelected ? Colors.cyan : Colors.white38,
             size: isSelected ? 30 : 26,
           ),
+          const SizedBox(height: 4), // 少し間隔をあける
           Text(
             label,
             style: TextStyle(

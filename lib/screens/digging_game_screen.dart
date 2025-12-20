@@ -141,100 +141,116 @@ if (_clickCount >= _calculatedRequiredClicks) _startShatterEffect();  }
     double blurSigma = iceOpacity * 25.0;
 
     return Container(
-      width: double.infinity, height: double.infinity,
+      width: double.infinity, 
+      height: double.infinity,
       color: Colors.black.withOpacity(0.95),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Text("思い出を掘り起こそう", style: TextStyle(color: Colors.cyan, fontWeight: FontWeight.bold, fontSize: 22, letterSpacing: 4)),
-          // ★ 難易度ラベルを表示
-          const SizedBox(height: 10),
-          Text(_getDifficultyLabel(), style: const TextStyle(color: Colors.white38, fontSize: 12, letterSpacing: 2)),
-          const SizedBox(height: 40),
-          AnimatedBuilder(
-            animation: Listenable.merge([_shakeController, _shatterController]),
-            builder: (context, child) => Transform.translate(
-              offset: Offset(sin(_shakeController.value * pi * 4) * 8, 0),
-              child: child,
-            ),
-            child: GestureDetector(
-              onTap: _handleTap,
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  Opacity(
-                    opacity: photoOpacity,
-                    child: Container(
-                      width: 300, height: 300,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(24),
-                        image: DecorationImage(image: _getImage(_targetMemory!.photo), fit: BoxFit.cover),
-                      ),
-                    ),
-                  ),
-                  if (!_shatterController.isAnimating)
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(24),
-                      child: Opacity(
-                        opacity: iceOpacity,
-                        child: BackdropFilter(
-                          filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
-                          child: Container(
-                            width: 300, height: 300,
-                            decoration: BoxDecoration(
-                              image: IceEffects.getIceDecoration(_targetIceIndex, opacity: 0.6),
-                              color: Colors.white.withOpacity(0.1),
-                              border: Border.all(color: Colors.white.withOpacity(0.5), width: 2),
-                            ),
-                            child: CustomPaint(
-                              painter: IceCrackPainter(progress: progress),
-                              child: const Icon(Icons.ac_unit, size: 80, color: Colors.white54),
-                            ),
+      // ★ 解決策：画面からはみ出してもスクロールできるようにする
+      child: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(vertical: 20),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min, // ★ 解決策：Columnを必要最小限の高さにする
+            children: [
+              const Text(
+                "思い出を掘り起こそう", 
+                style: TextStyle(color: Colors.cyan, fontWeight: FontWeight.bold, fontSize: 22, letterSpacing: 4)
+              ),
+              const SizedBox(height: 10),
+              Text(_getDifficultyLabel(), style: const TextStyle(color: Colors.white38, fontSize: 12, letterSpacing: 2)),
+              const SizedBox(height: 20), // 40から20へ微調整
+              
+              // --- 氷のビジュアル部分 ---
+              AnimatedBuilder(
+                animation: Listenable.merge([_shakeController, _shatterController]),
+                builder: (context, child) => Transform.translate(
+                  offset: Offset(sin(_shakeController.value * pi * 4) * 8, 0),
+                  child: child,
+                ),
+                child: GestureDetector(
+                  onTap: _handleTap,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      // 思い出の画像
+                      Opacity(
+                        opacity: photoOpacity,
+                        child: Container(
+                          width: 280, height: 280, // ★ 300から280へ少しだけサイズダウン
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(24),
+                            image: DecorationImage(image: _getImage(_targetMemory!.photo), fit: BoxFit.cover),
                           ),
                         ),
                       ),
-                    ),
-                  if (_shatterController.isAnimating)
-                    ..._shards.map((shard) => AnimatedBuilder(
-                      animation: _shatterController,
-                      builder: (context, child) {
-                        double t = _shatterController.value;
-                        return Transform.translate(
-                          offset: Offset(cos(shard.angle) * shard.distance * t, sin(shard.angle) * shard.distance * t + (300 * t * t)),
-                          child: Transform.rotate(angle: t * pi * 3, child: Opacity(opacity: 1.0 - t, child: child)),
-                        );
-                      },
-                      child: Container(
-                        width: shard.size, height: shard.size,
-                        decoration: BoxDecoration(
-                          color: shard.color, borderRadius: BorderRadius.circular(2),
-                          boxShadow: [
-                            if (shard.color != Colors.white.withOpacity(0.9))
-                              BoxShadow(color: shard.color.withOpacity(0.5), blurRadius: 10, spreadRadius: 2)
-                          ]
+                      // 氷のエフェクト
+                      if (!_shatterController.isAnimating)
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(24),
+                          child: Opacity(
+                            opacity: iceOpacity,
+                            child: BackdropFilter(
+                              filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
+                              child: Container(
+                                width: 280, height: 280, // ★ 画像サイズに合わせる
+                                decoration: BoxDecoration(
+                                  image: IceEffects.getIceDecoration(_targetIceIndex, opacity: 0.6),
+                                  color: Colors.white.withOpacity(0.1),
+                                  border: Border.all(color: Colors.white.withOpacity(0.5), width: 2),
+                                ),
+                                child: CustomPaint(
+                                  painter: IceCrackPainter(progress: progress),
+                                  child: const Icon(Icons.ac_unit, size: 60, color: Colors.white54),
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
-                    )),
-                ],
+                      // 破片エフェクト
+                      if (_shatterController.isAnimating)
+                        ..._shards.map((shard) => AnimatedBuilder(
+                          animation: _shatterController,
+                          builder: (context, child) {
+                            double t = _shatterController.value;
+                            return Transform.translate(
+                              offset: Offset(cos(shard.angle) * shard.distance * t, sin(shard.angle) * shard.distance * t + (300 * t * t)),
+                              child: Transform.rotate(angle: t * pi * 3, child: Opacity(opacity: 1.0 - t, child: child)),
+                            );
+                          },
+                          child: Container(
+                            width: shard.size, height: shard.size,
+                            decoration: BoxDecoration(
+                              color: shard.color, borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                        )),
+                    ],
+                  ),
+                ),
               ),
-            ),
+              
+              const SizedBox(height: 20), // 40から20へ微調整
+              Text(
+                _shatterController.isAnimating ? "成功！" : '残り: $remaining回', 
+                style: const TextStyle(color: Colors.cyan, fontSize: 24, fontWeight: FontWeight.bold)
+              ),
+              const SizedBox(height: 10),
+              
+              TextButton(
+                onPressed: () {
+                  _stopBGM();
+                  setState(() => _targetMemory = null);
+                }, 
+                child: const Text("キャンセル", style: TextStyle(color: Colors.white24))
+              ),
+            ],
           ),
-          const SizedBox(height: 40),
-          Text(_shatterController.isAnimating ? "成功！" : '残り: $remaining回', 
-                style: const TextStyle(color: Colors.cyan, fontSize: 24, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 20),
-          TextButton(onPressed: () {
-            _stopBGM();
-            setState(() => _targetMemory = null);
-          }, child: const Text("キャンセル", style: TextStyle(color: Colors.white24))),
-        ],
+        ),
       ),
     );
   }
-
  void _onFinishDigging() {
     final memory = _targetMemory!;
-    // コントローラーをここで定義（既存のまま）
     final TextEditingController commentController = TextEditingController();
     
     showDialog(
@@ -243,11 +259,9 @@ if (_clickCount >= _calculatedRequiredClicks) _startShatterEffect();  }
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF0D1B3E).withOpacity(0.95),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        // キーボード表示時にダイアログがズレるのを防ぐ
         insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
         title: const Text("発掘に成功しました！", style: TextStyle(color: Colors.cyan, fontSize: 18)),
         content: SizedBox(
-          // ダイアログの横幅を固定して安定させる
           width: MediaQuery.of(context).size.width * 0.8,
           child: SingleChildScrollView(
             child: Column(
@@ -258,19 +272,17 @@ if (_clickCount >= _calculatedRequiredClicks) _startShatterEffect();  }
                 const Text("心に触れたら、言葉と光を贈りましょう", 
                   style: TextStyle(color: Colors.white70, fontSize: 12)),
                 const SizedBox(height: 12),
-                
-                // --- メッセージ入力欄（ここが入力場所） ---
                 TextField(
                   controller: commentController,
                   maxLength: 20,
-                  autofocus: false, // 自動でキーボードを出さない（必要ならtrueに）
+                  autofocus: false,
                   style: const TextStyle(color: Colors.white, fontSize: 14),
                   cursorColor: Colors.cyan,
                   decoration: InputDecoration(
                     hintText: "一言メッセージ（任意）",
                     hintStyle: const TextStyle(color: Colors.white24, fontSize: 13),
                     filled: true,
-                    fillColor: Colors.white.withOpacity(0.08), // 少し明るくして見やすく
+                    fillColor: Colors.white.withOpacity(0.08),
                     contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
@@ -282,17 +294,16 @@ if (_clickCount >= _calculatedRequiredClicks) _startShatterEffect();  }
                     ),
                     counterStyle: const TextStyle(color: Colors.cyan, fontSize: 10),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
-        ),
+        ), // ★ ここで SizedBox と content が正しく閉じられる必要があります
         actions: [
           Padding(
             padding: const EdgeInsets.fromLTRB(8, 0, 8, 16),
             child: Column(
               children: [
-                // 選択肢1: キラキラと想いを贈る
                 ElevatedButton.icon(
                   onPressed: () async {
                     _sePlayer.play(AssetSource('sparkle.mp3'));
@@ -305,7 +316,6 @@ if (_clickCount >= _calculatedRequiredClicks) _startShatterEffect();  }
                       _shatterController.reset();
                     });
 
-                    // String? としてコメントを渡し、送信フラグを true に
                     await widget.onDiscover(
                       memory, 
                       commentText.isNotEmpty ? commentText : null, 
@@ -325,7 +335,6 @@ if (_clickCount >= _calculatedRequiredClicks) _startShatterEffect();  }
                   ),
                 ),
                 const SizedBox(height: 8),
-                // 選択肢2: 送らずに完了
                 TextButton(
                   onPressed: () async {
                     Navigator.pop(context);
@@ -334,8 +343,6 @@ if (_clickCount >= _calculatedRequiredClicks) _startShatterEffect();  }
                       _clickCount = 0; 
                       _shatterController.reset();
                     });
-
-                    // コメントは送らず false で実行
                     await widget.onDiscover(memory, null, false);
                   },
                   child: const Text("贈らずに自分のコレクションへ", 
@@ -348,7 +355,6 @@ if (_clickCount >= _calculatedRequiredClicks) _startShatterEffect();  }
       ),
     );
   }
-
   void _showCelebration() {
     late OverlayEntry overlayEntry;
     overlayEntry = OverlayEntry(
