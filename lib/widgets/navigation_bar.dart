@@ -1,12 +1,9 @@
 import 'package:flutter/material.dart';
-// CurrentViewの定義場所に合わせてimportしてください
-// もし home_screen.dart にある場合は循環参照になるため、
-// lib/models/enums.dart など別ファイルに Enum を移動することをお勧めします。
-import '../screens/home_screen.dart'; 
-
+import '../screens/home_screen.dart';
+// lib/widgets/navigation_bar.dart
 class AppNavigationBar extends StatelessWidget {
   final CurrentView currentView;
-  final ValueChanged<CurrentView> onViewChanged;
+  final Function(CurrentView) onViewChanged;
 
   const AppNavigationBar({
     super.key,
@@ -33,52 +30,41 @@ class AppNavigationBar extends StatelessWidget {
     }
 
     return Container(
-      decoration: const BoxDecoration(
-        border: Border(
-          top: BorderSide(color: Colors.white12, width: 0.5),
-        ),
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.5),
+        border: const Border(top: BorderSide(color: Colors.white10, width: 0.5)),
       ),
-      child: BottomNavigationBar(
-        type: BottomNavigationBarType.fixed,
-        showSelectedLabels: false,
-        showUnselectedLabels: false,
-        backgroundColor: Colors.black,
-        selectedItemColor: Colors.cyan,
-        unselectedItemColor: Colors.grey.shade700,
-        iconSize: 28,
-        
-        currentIndex: currentIndex,
-        onTap: (index) {
-          switch (index) {
-            case 0:
-              onViewChanged(CurrentView.home);
-              break;
-            case 1:
-              onViewChanged(CurrentView.dig);
-              break;
-            case 2:
-              // 実績画面へ
-              onViewChanged(CurrentView.achievements);
-              break;
-          }
-        },
-        items: const [
-          // 1. ホーム
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home_filled),
-            label: 'Home',
-          ),
-          
-          // 2. 発掘
-          BottomNavigationBarItem(
-            icon: Icon(Icons.travel_explore), 
-            label: 'Dig',
-          ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _buildNavButton(Icons.auto_fix_high, CurrentView.discovery, '発掘'),
+          _buildNavButton(Icons.home_rounded, CurrentView.home, 'ホーム'),
+          _buildNavButton(Icons.emoji_events_rounded, CurrentView.achievements, '実績'),
+        ],
+      ),
+    );
+  }
 
-          // 3. 実績 (コレクションを削除し、ここが3番目になります)
-          BottomNavigationBarItem(
-            icon: Icon(Icons.emoji_events), 
-            label: 'Trophies',
+  Widget _buildNavButton(IconData icon, CurrentView view, String label) {
+    final isSelected = currentView == view;
+    return GestureDetector(
+      onTap: () => onViewChanged(view),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            color: isSelected ? Colors.cyan : Colors.white38,
+            size: isSelected ? 30 : 26,
+          ),
+          Text(
+            label,
+            style: TextStyle(
+              color: isSelected ? Colors.cyan : Colors.white38,
+              fontSize: 10,
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+            ),
           ),
         ],
       ),

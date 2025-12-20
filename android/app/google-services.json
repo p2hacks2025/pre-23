@@ -12,7 +12,20 @@
           "package_name": "com.example.memory_digging_app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "264211385958-81udu1ssfcjci97nlkfuqrsemkvqbgmu.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.memory_digging_app",
+            "certificate_hash": "e0ea009b6655bdd21cfa1f6265899953de78e2a2"
+          }
+        },
+        {
+          "client_id": "264211385958-ugp02nogt653ftjif82n2bb9925f0dk2.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyDgoszdpdMWbMh62UNdukmCKRVm4FNSaLs"
@@ -20,7 +33,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "264211385958-ugp02nogt653ftjif82n2bb9925f0dk2.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "264211385958-bl6e0p4qt4rj43p9h2p0vdifftj2rde2.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.memoryDiggingApp"
+              }
+            }
+          ]
         }
       }
     }

@@ -1,212 +1,244 @@
 import 'package:flutter/material.dart';
-import '../models/game.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../widgets/effects.dart';
+import '../services/auth_service.dart';
+import '../models/user_profile.dart';
 
 class AchievementsScreen extends StatelessWidget {
-  final List<Achievement> achievements;
-  final int totalDigs;
-
-  const AchievementsScreen({
-    super.key,
-    required this.achievements,
-    required this.totalDigs,
-  });
+  const AchievementsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final completedCount = achievements.where((a) => a.completed).length;
+    final AuthService auth = AuthService();
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
+    return FutureBuilder<UserProfile?>(
+      future: auth.getCurrentUser(),
+      builder: (context, authSnapshot) {
+        if (!authSnapshot.hasData) {
+          return const Center(child: CircularProgressIndicator(color: Colors.cyan));
+        }
+
+        final userId = authSnapshot.data!.id;
+
+        return StreamBuilder<DocumentSnapshot>(
+          stream: FirebaseFirestore.instance
+              .collection('userProfiles')
+              .doc(userId)
+              .snapshots(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator(color: Colors.cyan));
+            }
+
+            final data = snapshot.data?.data() as Map<String, dynamic>? ?? {};
+
+            // 統計データの取得（コメントカウントを削除）
+            final stats = {
+              'digCount': data['totalDigs'] ?? 0,
+              'sendStampCount': data['sendStampCount'] ?? 0,
+              'beenDugCount': data['beenDugCount'] ?? 0,
+              'receiveStampCount': data['receiveStampCount'] ?? 0,
+            };
+
+            return SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 20),
+                  const Center(
+                    child: Text(
+                      'あなたの功績',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 4),
+                    ),
+                  ),
+                  const SizedBox(height: 30),
+                  
+                  // 1. 発掘の実績
+                  _buildCategorySection(
+                    context,
+                    "記憶を紐解いた歩み",
+                    "他人の氷を解いた数",
+                    stats['digCount']!,
+                    ["記憶の糸口", "思い出の解凍者", "物語を綴る風", "時を識る旅人"],
+                    Icons.auto_fix_high,
+                  ),
+
+                  // 2. キラキラを贈った実績
+                  _buildCategorySection(
+                    context,
+                    "分け与えた慈しみ",
+                    "キラキラを贈った数",
+                    stats['sendStampCount']!,
+                    ["ひとひらの輝き", "光の蒐集家", "記憶を照らす月", "永遠の星巡り"],
+                    Icons.flare,
+                  ),
+
+                  // 3. 自分の投稿が掘られた実績
+                  _buildCategorySection(
+                    context,
+                    "誰かに触れられた記憶",
+                    "自分の氷が解かれた数",
+                    stats['beenDugCount']!,
+                    ["目覚めるささやき", "透き通る結晶", "氷原の道標", "不滅の情景"],
+                    Icons.cloud_queue,
+                  ),
+
+                  // 4. キラキラを貰った実績
+                  _buildCategorySection(
+                    context,
+                    "心に届いた共鳴",
+                    "キラキラを贈られた数",
+                    stats['receiveStampCount']!,
+                    ["届いた光", "彩りの記憶", "心に降る銀河", "世界の灯火"],
+                    Icons.auto_awesome,
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // --- _buildCategorySection 以下のメソッドは以前のコードを維持 ---
+  Widget _buildCategorySection(
+    BuildContext context,
+    String title,
+    String subtitle,
+    int count,
+    List<String> titles,
+    IconData icon,
+  ) {
+    final thresholds = [1, 30, 100, 300];
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 24),
+      padding: const EdgeInsets.all(20),
+      decoration: IceEffects.glassStyle,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            '実績',
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
+          Row(
+            children: [
+              Icon(icon, color: Colors.cyan, size: 20),
+              const SizedBox(width: 8),
+              Text(title,
+                  style: const TextStyle(
+                      color: Colors.cyan,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold)),
+            ],
           ),
+          Text(subtitle,
+              style: const TextStyle(color: Colors.white38, fontSize: 11)),
           const SizedBox(height: 16),
-          // Stats
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Colors.cyan.withAlpha(51),
-                  Colors.blue.withAlpha(51),
-                ],
-              ),
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: Colors.cyan.withAlpha(77)),
-            ),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '$completedCount / ${achievements.length}',
-                      style: const TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
+              children: List.generate(4, (index) {
+                bool isUnlocked = count >= thresholds[index];
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: isUnlocked
+                          ? Colors.cyan.withOpacity(0.15)
+                          : Colors.black.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: isUnlocked
+                            ? Colors.cyan.withOpacity(0.6)
+                            : Colors.white10,
                       ),
                     ),
-                    Text(
-                      '達成した実績',
-                      style: TextStyle(color: Colors.cyan[300], fontSize: 14),
-                    ),
-                  ],
-                ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      '$totalDigs',
-                      style: const TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                    child: Text(
+                      titles[index],
+                      style: TextStyle(
+                        color: isUnlocked ? Colors.white : Colors.white24,
+                        fontSize: 12,
+                        letterSpacing: 1,
                       ),
                     ),
-                    Text(
-                      '総発掘回数',
-                      style: TextStyle(color: Colors.cyan[300], fontSize: 14),
-                    ),
-                  ],
-                ),
-              ],
+                  ),
+                );
+              }),
             ),
           ),
-          const SizedBox(height: 16),
-          // Achievements List
-          ...achievements.map((achievement) => _buildAchievementCard(achievement)),
+          const SizedBox(height: 20),
+          _buildEnhancedProgressBar(count, thresholds),
         ],
       ),
     );
   }
 
-  Widget _buildAchievementCard(Achievement achievement) {
-    final progressPercent = (achievement.progress / achievement.requirement).clamp(0.0, 1.0) * 100;
+  Widget _buildEnhancedProgressBar(int count, List<int> thresholds) {
+    int nextThreshold = thresholds.firstWhere((t) => t > count, orElse: () => 0);
+    bool isMax = nextThreshold == 0;
+    double progressValue;
+    if (isMax) {
+      progressValue = 1.0;
+    } else {
+      int prevThreshold = thresholds.lastWhere((t) => t <= count, orElse: () => 0);
+      progressValue = (count - prevThreshold) / (nextThreshold - prevThreshold);
+    }
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Colors.cyan.withAlpha(51),
-            Colors.blue.withAlpha(51),
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            Text(
+              isMax ? "$count / Max" : "$count / $nextThreshold",
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                fontFamily: 'monospace',
+              ),
+            ),
           ],
         ),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-            color: achievement.completed
-              ? Colors.amber.withAlpha(128)
-              : Colors.cyan.withAlpha(77),
-          width: achievement.completed ? 2 : 1,
-        ),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            achievement.icon,
-            style: TextStyle(
-              fontSize: 48,
-              color: achievement.completed ? Colors.white : Colors.white54,
+        const SizedBox(height: 8),
+        Stack(
+          children: [
+            Container(
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(2),
+              ),
             ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      achievement.title,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 500),
+              height: 4,
+              child: FractionallySizedBox(
+                alignment: Alignment.centerLeft,
+                widthFactor: progressValue.clamp(0.0, 1.0),
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Colors.cyan, Colors.blueAccent],
                     ),
-                    if (achievement.completed) ...[
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.amber.withAlpha(51),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.amber.withAlpha(128)),
-                        ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.check, size: 12, color: Colors.amber),
-                            SizedBox(width: 4),
-                            Text(
-                              '達成',
-                              style: TextStyle(
-                                color: Colors.amber,
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                    borderRadius: BorderRadius.circular(2),
+                    boxShadow: [
+                      BoxShadow(
+                          color: Colors.cyan.withOpacity(0.3), blurRadius: 4)
                     ],
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  achievement.description,
-                  style: TextStyle(color: Colors.cyan[300], fontSize: 14),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      '進捗',
-                      style: TextStyle(color: Colors.cyan[300], fontSize: 12),
-                    ),
-                    Text(
-                      '${achievement.progress} / ${achievement.requirement}',
-                      style: TextStyle(color: Colors.cyan[300], fontSize: 12),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                    child: LinearProgressIndicator(
-                    value: progressPercent / 100,
-                    minHeight: 8,
-                    backgroundColor: Colors.cyan.shade900.withAlpha(128),
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      achievement.completed
-                          ? Colors.amber
-                          : Colors.cyan,
-                    ),
                   ),
                 ),
-              ],
+              ),
             ),
-          ),
-        ],
-      ),
+          ],
+        ),
+      ],
     );
   }
 }
-

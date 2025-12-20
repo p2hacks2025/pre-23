@@ -1,4 +1,6 @@
+// lib/screens/sign_in_screen.dart
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../services/auth_service.dart';
 import '../models/user_profile.dart';
 
@@ -7,9 +9,9 @@ class SignInScreen extends StatefulWidget {
   final VoidCallback onCancel;
 
   const SignInScreen({
-    super.key,
-    required this.onSignedIn,
-    required this.onCancel,
+    super.key, 
+    required this.onSignedIn, 
+    required this.onCancel
   });
 
   @override
@@ -17,157 +19,289 @@ class SignInScreen extends StatefulWidget {
 }
 
 class _SignInScreenState extends State<SignInScreen> {
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
   final _usernameController = TextEditingController();
-  final _passcodeController = TextEditingController();
-  final AuthService _authService = AuthService();
   
-  bool _isRegistering = false; // 登録モードかどうか
-  String _errorMessage = '';
+  final AuthService _auth = AuthService();
+  
   bool _isLoading = false;
+  // false = ログインモード, true = 新規登録モード
+  bool _isRegisterMode = false; 
+  // ★ ProfileScreenと同じパスワード可視化フラグ
+  bool _isPasswordObscured = true; 
+  String? _errorMessage;
 
+  // メインの処理
   Future<void> _submit() async {
-    setState(() {
-      _errorMessage = '';
-      _isLoading = true;
-    });
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
 
-    final username = _usernameController.text.trim();
-    final passcode = _passcodeController.text.trim();
-
-    if (username.isEmpty || passcode.isEmpty) {
-      setState(() {
-        _errorMessage = 'ユーザー名とパスコードを入力してください';
-        _isLoading = false;
-      });
+    // 入力チェック
+    if (email.isEmpty || password.isEmpty) {
+      setState(() => _errorMessage = 'メールアドレスとパスワードを入力してください');
       return;
     }
 
-    bool success;
-    if (_isRegistering) {
-      // 新規登録
-      success = await _authService.signUp(username, passcode);
-      if (!success) {
-        setState(() {
-          _errorMessage = 'そのユーザー名は既に使用されています';
-        });
-      }
-    } else {
-      // ログイン
-      success = await _authService.signIn(username, passcode);
-      if (!success) {
-        setState(() {
-          _errorMessage = 'ユーザー名かパスコードが間違っています。\n未登録の場合は新規登録してください。';
-        });
-      }
+    if (_isRegisterMode && _usernameController.text.trim().isEmpty) {
+      setState(() => _errorMessage = 'ユーザー名を入力してください');
+      return;
     }
 
     setState(() {
-      _isLoading = false;
+      _isLoading = true;
+      _errorMessage = null;
     });
 
-    if (success) {
-      // 成功したらユーザー情報を取得してコールバック
-      final user = await _authService.getCurrentUser();
-      widget.onSignedIn(user);
+    try {
+      UserProfile profile;
+      
+      if (_isRegisterMode) {
+        // -------------------------
+        // 新規登録モードの場合
+        // -------------------------
+        try {
+          profile = await _auth.signUpWithEmail(
+            email: email,
+            password: password,
+            username: _usernameController.text.trim(),
+          );
+        } on FirebaseAuthException catch (e) {
+          if (e.code == 'email-already-in-use') {
+            setState(() {
+              _isRegisterMode = false; // ログインモードへ
+              _isLoading = false;
+              _errorMessage = 'このメールアドレスは既に登録されています。\nログインボタンを押してください。';
+            });
+            return;
+          }
+          rethrow;
+        }
+      } else {
+        // -------------------------
+        // ログインモードの場合
+        // -------------------------
+        try {
+          profile = await _auth.signInWithEmail(email, password);
+        } on FirebaseAuthException catch (e) {
+          if (e.code == 'user-not-found' || e.code == 'invalid-credential') {
+            setState(() {
+              _isRegisterMode = true; // 新規登録モードへ
+              _isLoading = false;
+              _errorMessage = 'アカウントが見つかりません。\nユーザー名を入力して新規登録してください。';
+            });
+            return;
+          } else if (e.code == 'wrong-password') {
+            throw Exception('パスワードが違います');
+          } else {
+            rethrow;
+          }
+        }
+      }
+
+      // 成功時
+      if (!mounted) return;
+      Navigator.of(context).pop(); // ダイアログを閉じる
+      widget.onSignedIn(profile); // 親画面に通知
+
+    } catch (e) {
+      setState(() {
+        _errorMessage = _cleanErrorMessage(e);
+      });
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  // エラーメッセージの整形
+  String _cleanErrorMessage(dynamic e) {
+    String msg = e.toString();
+    if (msg.contains('wrong-password')) return 'パスワードが間違っています';
+    if (msg.contains('invalid-email')) return 'メールアドレスの形式が正しくありません';
+    if (msg.contains('weak-password')) return 'パスワードは6文字以上で設定してください';
+    if (msg.contains('email-already-in-use')) return 'このメールアドレスは既に登録されています';
+    if (msg.contains('user-not-found')) return 'アカウントが見つかりません';
+    if (msg.contains('configuration-not-found')) return '認証設定が無効です。\nFirebaseコンソールでメール認証をONにしてください。';
+    if (msg.contains('network-request-failed')) return '通信エラーが発生しました。接続を確認してください。';
+    
+    return msg.replaceAll('Exception:', '').replaceAll(RegExp(r'\[firebase_auth/.*\]\s*'), '');
   }
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: Colors.grey[900],
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              _isRegistering ? '新規登録' : 'ログイン',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
+    return GestureDetector(
+      onTap: () => FocusScope.of(context).unfocus(),
+      child: Material(
+        color: Colors.black54,
+        child: Center(
+          child: SingleChildScrollView(
+            child: Container(
+              width: 340,
+              margin: const EdgeInsets.all(24),
+              padding: const EdgeInsets.all(32),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0D1B3E),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: Colors.cyan.withOpacity(0.3), width: 1),
+                boxShadow: [
+                  BoxShadow(color: Colors.cyan.withOpacity(0.1), blurRadius: 20, spreadRadius: 5)
+                ],
               ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _usernameController,
-              style: const TextStyle(color: Colors.white),
-              decoration: const InputDecoration(
-                labelText: 'ユーザー名',
-                labelStyle: TextStyle(color: Colors.grey),
-                enabledBorder: UnderlineInputBorder(
-                  borderSide: BorderSide(color: Colors.grey),
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _passcodeController,
-              style: const TextStyle(color: Colors.white),
-              obscureText: true,
-              decoration: const InputDecoration(
-                labelText: 'パスコード',
-                labelStyle: TextStyle(color: Colors.grey),
-                enabledBorder: UnderlineInputBorder(
-                  borderSide: BorderSide(color: Colors.grey),
-                ),
-              ),
-            ),
-            if (_errorMessage.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 12),
-                child: Text(
-                  _errorMessage,
-                  style: const TextStyle(color: Colors.redAccent, fontSize: 12),
-                ),
-              ),
-            const SizedBox(height: 24),
-            if (_isLoading)
-              const CircularProgressIndicator(color: Colors.cyan)
-            else
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  Text(
+                    _isRegisterMode ? '新規登録' : 'サインイン',
+                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 1.2),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 24),
+
+                  if (_errorMessage != null) ...[
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.redAccent.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.redAccent.withOpacity(0.3)),
+                      ),
+                      child: Text(
+                        _errorMessage!,
+                        style: const TextStyle(color: Colors.redAccent, fontSize: 13),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+
+                  _buildTextField(
+                    controller: _emailController,
+                    label: 'メールアドレス',
+                    icon: Icons.email_outlined,
+                    inputType: TextInputType.emailAddress,
+                  ),
+                  const SizedBox(height: 16),
+
+                  // ★ 修正：ProfileScreenと同じロジックのパスワード入力欄
+                  _buildTextField(
+                    controller: _passwordController,
+                    label: 'パスワード (6文字以上)',
+                    icon: Icons.lock_outline,
+                    obscureText: _isPasswordObscured,
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _isPasswordObscured ? Icons.visibility : Icons.visibility_off,
+                        color: Colors.white54,
+                        size: 20,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          _isPasswordObscured = !_isPasswordObscured;
+                        });
+                      },
+                    ),
+                  ),
+                  
+                  if (_isRegisterMode) ...[
+                    const SizedBox(height: 16),
+                    _buildTextField(
+                      controller: _usernameController,
+                      label: 'ユーザー名 (表示名)',
+                      icon: Icons.person_outline,
+                    ),
+                  ],
+
+                  const SizedBox(height: 24),
+
+                  if (_isLoading)
+                    const Center(child: CircularProgressIndicator(color: Colors.cyan))
+                  else
+                    ElevatedButton(
+                      onPressed: _submit,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.cyan,
+                        foregroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        elevation: 0,
+                      ),
+                      child: Text(
+                        _isRegisterMode ? '登録して始める' : 'ログイン',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      ),
+                    ),
+
+                  const SizedBox(height: 16),
+
+                  TextButton(
+                    onPressed: () {
+                      setState(() {
+                        _isRegisterMode = !_isRegisterMode;
+                        _errorMessage = null;
+                        // モード切り替え時にパスワード非表示状態に戻す
+                        _isPasswordObscured = true;
+                      });
+                    },
+                    child: Text(
+                      _isRegisterMode 
+                        ? '既にアカウントをお持ちの方はログイン' 
+                        : 'アカウントをお持ちでない方は新規登録',
+                      style: const TextStyle(color: Colors.cyanAccent, fontSize: 12),
+                    ),
+                  ),
+
                   TextButton(
                     onPressed: widget.onCancel,
-                    child: const Text('キャンセル', style: TextStyle(color: Colors.grey)),
-                  ),
-                  const SizedBox(width: 8),
-                  ElevatedButton(
-                    onPressed: _submit,
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.cyan),
-                    child: Text(
-                      _isRegistering ? '登録して開始' : 'ログイン',
-                      style: const TextStyle(color: Colors.black),
-                    ),
+                    child: const Text('キャンセル', style: TextStyle(color: Colors.white54)),
                   ),
                 ],
               ),
-            const SizedBox(height: 16),
-            // ログイン・登録の切り替えリンク
-            GestureDetector(
-              onTap: () {
-                setState(() {
-                  _isRegistering = !_isRegistering;
-                  _errorMessage = '';
-                });
-              },
-              child: Text(
-                _isRegistering
-                    ? 'すでにアカウントをお持ちの方はこちら'
-                    : 'アカウントをお持ちでない方はこちら（新規登録）',
-                style: const TextStyle(
-                  color: Colors.cyan,
-                  decoration: TextDecoration.underline,
-                  fontSize: 12,
-                ),
-              ),
             ),
-          ],
+          ),
         ),
       ),
     );
+  }
+
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    bool obscureText = false,
+    TextInputType inputType = TextInputType.text,
+    Widget? suffixIcon, 
+  }) {
+    return TextField(
+      controller: controller,
+      obscureText: obscureText,
+      keyboardType: inputType,
+      style: const TextStyle(color: Colors.white),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: const TextStyle(color: Colors.white38),
+        prefixIcon: Icon(icon, color: Colors.cyan.withOpacity(0.7), size: 20),
+        suffixIcon: suffixIcon,
+        filled: true,
+        fillColor: Colors.black26,
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Colors.cyan, width: 1),
+        ),
+        contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    _usernameController.dispose();
+    super.dispose();
   }
 }

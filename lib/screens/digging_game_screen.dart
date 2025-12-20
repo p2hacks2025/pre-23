@@ -1,597 +1,560 @@
-import 'dart:math';
 import 'package:flutter/material.dart';
-
+import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
+import 'dart:io';
+import 'dart:ui';
+import 'dart:math';
+import 'package:audioplayers/audioplayers.dart'; // ★オーディオ追加
 import '../models/memory.dart';
-import '../models/game.dart'; 
-import '../services/storage_service.dart';
-//kakuninn
-
-// セル状態の定義 (変更なし)
-enum CellState { frozen, cracking, melted, found }
+import '../widgets/effects.dart';
 
 class DiggingGameScreen extends StatefulWidget {
-  final List<Memory> undiscoveredMemories;
-  final Function(Memory) onDiscover;
-  final Function(Item) onDiscoverItem;
-  final int dailyDigs;
-  final Function(int) onDailyDigsChanged;
-  
-  const DiggingGameScreen({
-    super.key,
-    required this.undiscoveredMemories,
-    required this.onDiscover,
-    required this.onDiscoverItem,
-    required this.dailyDigs,
-    required this.onDailyDigsChanged,
-  });
+  final List<Memory> allOtherMemories;
+final Function(Memory, String?, bool) onDiscover;  const DiggingGameScreen({super.key, required this.allOtherMemories, required this.onDiscover});
 
   @override
   State<DiggingGameScreen> createState() => _DiggingGameScreenState();
 }
 
-class _DiggingGameScreenState extends State<DiggingGameScreen>
-    with TickerProviderStateMixin {
-  static const int gridCols = 4;
-  static const int gridRows = 4;
-  static const int gridSize = gridCols * gridRows;
-  static const double _customHeaderHeight = 90.0; // ヘッダーの高さを微増
+class _DiggingGameScreenState extends State<DiggingGameScreen> with TickerProviderStateMixin {
+  Memory? _targetMemory;
+  int _clickCount = 0;
+  int _targetIceIndex = 0; 
+  int _calculatedRequiredClicks = 10; // ★ 動的に計算したクリック数を保持
+  int _calculateDifficulty(DateTime createdAt) {
+    final now = DateTime.now();
+    final age = now.difference(createdAt);
 
-  late List<CellState> _cellStates;
-  final Map<int, AnimationController> _breakControllers = {};
-  late AnimationController _resultController;
-  final StorageService _storageService = StorageService();
+    if (age.inHours < 1) {
+      return 8;   // 生まれたて：サクサク
+    } else if (age.inDays < 1) {
+      return 15;  // 1日以内：標準
+    } else if (age.inDays < 7) {
+      return 30;  // 1週間以内：少し硬い
+    } else {
+      return 50;  // それ以上：永久凍土（カチカチ）
+    }
+  }
+  // ★ 硬さに応じたラベルを取得
+  String _getDifficultyLabel() {
+    if (_calculatedRequiredClicks >= 50) return "【 永久凍土 】";
+    if (_calculatedRequiredClicks >= 30) return "【 古い氷 】";
+    if (_calculatedRequiredClicks <= 8) return "【 新しい氷 】";
+    return "";
+  }
 
-  bool _isDigging = false;
-  dynamic _discovered;
+  // ★ オーディオプレイヤーの定義
+  final AudioPlayer _sePlayer = AudioPlayer(); // 効果音用
+  final AudioPlayer _bgmPlayer = AudioPlayer(); // BGM用
 
-  int? _hiddenMemoryIndex;
-  //int? _hiddenItemIndex;
+  late AnimationController _shakeController;
+  late AnimationController _shatterController;
+  List<IceShard> _shards = [];
 
-  int _bonusDigs = 0;
-  
   @override
   void initState() {
     super.initState();
-    _cellStates = List<CellState>.filled(gridSize, CellState.frozen);
-    _resultController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 600),
-    );
-    _bonusDigs = 0;
-    _setupHidden();
+    _shakeController = AnimationController(vsync: this, duration: const Duration(milliseconds: 100));
+    _shatterController = AnimationController(vsync: this, duration: const Duration(milliseconds: 800));
   }
 
   @override
   void dispose() {
-    for (final c in _breakControllers.values) {
-      c.dispose();
-    }
-    _resultController.dispose();
+    // ★ リソースの解放
+    _sePlayer.dispose();
+    _bgmPlayer.dispose();
+    _shakeController.dispose();
+    _shatterController.dispose();
     super.dispose();
   }
 
-  // --- ロジック関数 (変更なし) ---
-  void _setupHidden() {
-    final rnd = Random();
-    _cellStates = List<CellState>.filled(gridSize, CellState.frozen);
-    final indices = List<int>.generate(gridSize, (i) => i)..shuffle(rnd);
-    // 1. 記憶の断片の配置
-    // 未発見の記憶がある限り、必ず一つのセルに記憶を隠します。
-    _hiddenMemoryIndex = indices.isNotEmpty && widget.undiscoveredMemories.isNotEmpty
-        ? indices.removeLast()
-        : null;
-    //_hiddenItemIndex = indices.isNotEmpty && rnd.nextDouble() < 0.6
-        //? indices.removeLast()
-        //: null;
-  }
-
-  Future<void> _dig(int idx) async {
-    // 既に掘ったセル、または発掘中の場合は何もしない
-    if (_isDigging || _cellStates[idx] != CellState.frozen) return;
-    
-    // 発掘回数がゼロなら、即座にダイアログを表示して終了
-    if (widget.dailyDigs + _bonusDigs <= 0) {
-      await _showDailyDigsEndDialog();
-      return; 
-    }
-
-    setState(() => _isDigging = true);
-
-    AnimationController? ctrl;
-    try {
-      // クラッキングアニメーション
-      setState(() => _cellStates[idx] = CellState.cracking);
-      ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 50));
-      _breakControllers[idx] = ctrl;
-      await ctrl.forward();
-      await Future.delayed(const Duration(milliseconds: 10));
-
-      bool found = false;
-      Memory? foundMemory;
-      //Item? foundItem;
-
-      if (idx == _hiddenMemoryIndex) {
-        Memory? m;
-        // 未発見の記憶がない場合を考慮 (通常は_setupHiddenで防止されるが安全のため)
-        if (widget.undiscoveredMemories.isNotEmpty) m = widget.undiscoveredMemories.removeAt(0); 
-        if (m != null) {
-          found = true;
-          foundMemory = m;
-        }
-      }
-
-      if (found) {
-        // 【発見時のロジック: 回数消費、状態更新、永続化、実績更新】
-        setState(() {
-          _cellStates[idx] = CellState.found;
-          _discovered = foundMemory;
-          _hiddenMemoryIndex = foundMemory != null ? null : _hiddenMemoryIndex;
-          //_hiddenItemIndex = foundItem != null ? null : _hiddenItemIndex;
-
-        
-        });
-        
-        // 永続化 & コールバック
-        try {
-          if (foundMemory != null) {
-            widget.onDiscover(foundMemory);
-            final current = await _storageService.getDiscoveredMemories();
-            final updated = [...current, foundMemory.copyWith(discovered: true)];
-            await _storageService.saveDiscoveredMemories(updated);
-          }
-          // 累積発掘回数と実績の更新
-          final total = await _storageService.getTotalDigs();
-          await _storageService.saveTotalDigs(total + 1);
-          await _updateAchievements(null, foundMemory);
-          
-          // 発掘回数削減ロジック（ボーナス優先）
-          final nextRemaining = (widget.dailyDigs - 1).clamp(0, 9999);
-          widget.onDailyDigsChanged(nextRemaining);
-          
-          final data = await _storageService.getDailyDigData();
-          final today = DateTime.now().toIso8601String().split('T')[0];
-          final newUsed = (data['used'] as int) + 1;
-          await _storageService.saveDailyDigData(today, nextRemaining, newUsed);
-
-        } catch (e) {
-          debugPrint('永続化エラー: $e');
-        }
-        
-        _resultController.forward();
-      } else {
-        // 空振り時のロジック: 回数消費なし、セルを溶かす
-        setState(() => _cellStates[idx] = CellState.melted);
-      }
-
-      // アニメーションコントローラーのクリーンアップ
-      ctrl.dispose();
-      _breakControllers.remove(idx);
-
-    } finally {
-      setState(() => _isDigging = false);
-    }
-  }
-
-  Future<void> _updateAchievements(Item? item, Memory? memory) async {
-    try {
-      final achievements = await _storageService.getAchievements();
-      bool changed = false;
-      
-      // 1. 記憶の断片 (memoryCount) の更新
-      if (memory != null) {
-        final discoveredMemories = await _storageService.getDiscoveredMemories();
-        final memoryCount = discoveredMemories.length;
-        for (var a in achievements.where((a) => a.type == AchievementType.memoryCount)) {
-          if (!a.completed) {
-            final newProgress = min(memoryCount, a.requirement);
-            if (newProgress > a.progress) {
-              achievements[achievements.indexOf(a)] = a.copyWith(
-                progress: newProgress,
-                completed: newProgress == a.requirement
-              );
-              changed = true;
-            }
-          }
-        }
-      }
-
-      // 2. アイテム関連 (削除済み)
-
-      if (changed) {
-        await _storageService.saveAchievements(achievements);
-      }
-    } catch (e) {
-      debugPrint('実績更新エラー: $e');
-    }
-  }
-
-  // ★ 削除: _getBonusDigsForRarity (未使用警告対応)
-
-  /* Item _makeItem() { ... } */
-
-  // ★ 削除: _getRarityLabel (item生成ロジック削除に伴い未使用)
-
-  Future<void> _showDailyDigsEndDialog() async {
-    if (!mounted) return;
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Text('発掘終了'),
-        content: const Text('本日の発掘回数（ボーナス含む）はすべて使い切りました。明日またお会いしましょう！'),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-            },
-            child: const Text('閉じる'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _reset() {
-    for (final c in _breakControllers.values) {
-      c.dispose();
-    }
-    _breakControllers.clear();
-    
-    _resultController.reset();
-    _isDigging = false;
-    
-    setState(() {
-      _discovered = null; 
-      _setupHidden();
-    });
-    
-    final total = widget.dailyDigs + _bonusDigs;
-    if (total <= 0) {
-      _showDailyDigsEndDialog();
-    }
-  }
   
-  // --------------------------------------------------------------------------
-  // 🚀 UI修正 1: ファンタジー要素を強めたカスタムヘッダー
-  // --------------------------------------------------------------------------
-  Widget _buildCustomHeader(double width) {
-    return Container(
-      height: _customHeaderHeight,
-      width: width,
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        // メタリックな青色グラデーション
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Colors.blue.shade900,
-            Colors.blue.shade800,
-          ],
-        ),
-        borderRadius: BorderRadius.circular(12),
-        // 魔法陣風のボーダー
-        border: Border.all(color: Colors.cyan.shade300, width: 3),
-        boxShadow: [
-          BoxShadow(
-            // ★ withValues に修正
-            color: Colors.cyan.withValues(alpha: 0.3),
-            blurRadius: 10,
-            spreadRadius: 2,
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.ac_unit, color: Colors.cyanAccent, size: 40),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Text(
-                  '永久凍土発掘所',
-                  style: TextStyle(
-                    color: Colors.white, 
-                    fontSize: 22, 
-                    fontWeight: FontWeight.bold
-                  ),
-                ),
-                Text(
-                  '時を超えた記憶を探し出せ',
-                  style: TextStyle(color: Colors.cyan.shade200, fontSize: 14),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
+
+  void _stopBGM() {
+    _bgmPlayer.stop();
   }
 
-  // --------------------------------------------------------------------------
-  // 🚀 UI修正 2: セルデザインの変更 (凍土タイル風)
-  // --------------------------------------------------------------------------
-  Widget _cell(int idx) {
-    final st = _cellStates[idx];
-    final ctrl = _breakControllers[idx];
-    final av = ctrl != null ? ctrl.value : 0.0;
-
-    Color bg;
-    Color borderColor;
-    double elevation = 3.0;
-    Widget ico;
+  void _handleTap() {
+    if (_shatterController.isAnimating) return;
+    HapticFeedback.mediumImpact();
     
-    switch (st) {
-      case CellState.frozen:
-        // 深く凍った氷のブロック
-        bg = Color.lerp(const Color(0xFF6785A3), const Color(0xFF90a4ae), av)!; // わずかにアニメーション
-        // ★ withValues に修正
-        borderColor = Colors.white.withValues(alpha: 0.6);
-        ico = const Icon(Icons.layers_clear, color: Colors.white70, size: 24);
-        elevation = 5.0;
-        break;
-      case CellState.cracking:
-        // 砕けるアニメーション
-        final v = av;
-        if (v < 0.5) {
-          bg = Color.lerp(const Color(0xFF90a4ae), Colors.yellow.shade50, v * 2)!;
-        } else {
-          bg = Color.lerp(Colors.yellow.shade50, const Color(0xFFffeb3b), (v - 0.5) * 2)!;
-        }
-        borderColor = Colors.amber;
-        ico = Transform.scale(
-          scale: 1.0 + (av * 0.4),
-          child: const Icon(Icons.local_fire_department, color: Colors.redAccent, size: 28), // 融解を示す炎
-        );
-        elevation = 8.0;
-        break;
-      case CellState.melted:
-        // 掘り起こされた泥や水たまり
-        bg = const Color(0xFF263238);
-        borderColor = const Color(0xFF455a64);
-        ico = const Icon(Icons.water, color: Colors.blueGrey, size: 24);
-        elevation = 1.0;
-        break;
-      case CellState.found:
-        // 発見場所
-        bg = Colors.amber.shade700;
-        borderColor = Colors.yellow.shade300;
-        ico = const Icon(Icons.star_rounded, color: Colors.white, size: 30);
-        elevation = 6.0;
-        break;
-    }
+    // タップ音（削る音）を入れる場合はここ
+    // _sePlayer.play(AssetSource('sounds/ice_tap.mp3'), mode: PlayerMode.lowLatency);
 
-    return GestureDetector(
-      onTap: () => _dig(idx),
-      child: Container(
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: borderColor, width: 2),
-          boxShadow: [
-            BoxShadow(
-              // ★ withValues に修正
-              color: Colors.black.withValues(alpha: 0.4),
-              blurRadius: elevation * 2,
-              offset: Offset(0, elevation),
-            ),
-            // 凍土の光沢
-            if (st == CellState.frozen)
-              BoxShadow(
-                // ★ withValues に修正
-                color: Colors.cyanAccent.withValues(alpha: 0.2),
-                blurRadius: 4,
-                spreadRadius: 1,
-              ),
-          ],
-        ),
-        child: Center(child: ico),
-      ),
-    );
-  }
+    _shakeController.forward(from: 0.0);
+    setState(() => _clickCount++);
+if (_clickCount >= _calculatedRequiredClicks) _startShatterEffect();  }
 
-  // --------------------------------------------------------------------------
-  // 🚀 UI修正 3: 発見ポップアップの豪華化
-  // --------------------------------------------------------------------------
-  Widget _buildDiscoveryPopup(double w) {
-    // final discoveredItem = _discovered is Item ? _discovered as Item : null; 
-    final discoveredMemory = _discovered is Memory ? _discovered as Memory : null;
-    
-    // ★ 削除: isItem (未使用警告対応)
-    
-    // discoveredMemory が null の場合は表示しない（_dig ロジックで制御されているはず）
-    if (discoveredMemory == null) return const SizedBox.shrink(); 
+  void _startShatterEffect() {
+    // ★ 1. 氷が割れる音を再生
+    _sePlayer.play(AssetSource('icebreak.mp3'));
+    _stopBGM(); // 割れたらBGMを止める
 
-    return Container(
-      color: Colors.black54,
-      child: Center(
-        child: ScaleTransition(
-          scale: CurvedAnimation(parent: _resultController, curve: Curves.elasticOut),
-          child: Container(
-            width: min(350.0, w - 40),
-            padding: const EdgeInsets.all(24),
-            // 背景を記憶発見用に固定
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [Colors.indigo.shade800, Colors.blue.shade900],
-              ),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: Colors.cyan.shade300, 
-                width: 3
-              ),
-              boxShadow: [
-                BoxShadow(
-                  // ★ withValues に修正
-                  color: Colors.cyan.withValues(alpha: 0.4),
-                  blurRadius: 20,
-                ),
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // タイトルを記憶発見用に固定
-                const Text(
-                  '🌟 記憶の断片解放!', 
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: Colors.white)
-                ),
-                const SizedBox(height: 16),
-                
-                // 画像を記憶のアイコンに固定
-                const Icon(Icons.history_edu, size: 80, color: Colors.cyanAccent),
-                const SizedBox(height: 12),
-                
-                // 発見された記憶のテキストを表示
-                Text(
-                  discoveredMemory.text.length > 50 ? '${discoveredMemory.text.substring(0, 50)}...' : discoveredMemory.text, 
-                  style: const TextStyle(fontSize: 16, color: Colors.white70),
-                  textAlign: TextAlign.center,
-                ),
-                
-                const SizedBox(height: 24),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: _reset, 
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.cyan, // 色を記憶発見用に固定
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    child: const Text('閉じる/次を掘る', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ));
+    final random = Random();
+    bool isRare = random.nextDouble() < 0.2;
+
+    _shards = List.generate(25, (index) {
+      Color shardColor = Colors.white.withOpacity(0.9);
+      if (isRare) {
+        shardColor = HSVColor.fromAHSV(1.0, random.nextDouble() * 360, 0.6, 1.0).toColor();
+      }
+
+      return IceShard(
+        angle: random.nextDouble() * pi * 2,
+        distance: 100.0 + random.nextDouble() * 200.0,
+        size: 8.0 + random.nextDouble() * 25.0,
+        color: shardColor,
+      );
+    });
+
+    HapticFeedback.heavyImpact();
+    _shatterController.forward(from: 0.0).then((_) => _onFinishDigging());
   }
 
   @override
   Widget build(BuildContext context) {
-    // final total = widget.dailyDigs + _bonusDigs; // 警告: total未使用なら削除推奨だが今回は残置
-    
-    return Container(
-      // 🚀 UI修正 4: 画面全体の背景をファンタジー風グラデーションに
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            Colors.blue.shade900,
-            Colors.indigo.shade900,
-            Colors.black87,
-          ],
-          stops: const [0.0, 0.5, 1.0],
-        ),
-      ),
-      child: LayoutBuilder(builder: (context, cons) {
-        final w = cons.maxWidth;
-        return Stack(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  
-                  // カスタムヘッダーの配置
-                  _buildCustomHeader(w),
-                  
-                  // 発掘情報ヘッダー (位置を下に移動)
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text('発掘フィールド', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
-                            const SizedBox(height: 4),
-                            // 🚀 UI修正 5: 発掘回数の表示をリッチに
-                            Row(
-                              children: [
-                                const Icon(Icons.flash_on, color: Colors.yellow, size: 16),
-                                const SizedBox(width: 4),
-                                Text(
-                                  '残り: ${widget.dailyDigs}', 
-                                  style: const TextStyle(fontSize: 14, color: Colors.white70)
-                                ),
-                                if (_bonusDigs > 0) ...[
-                                  const SizedBox(width: 8),
-                                  const Icon(Icons.star, color: Colors.amberAccent, size: 16),
-                                  Text(' (+ボーナス$_bonusDigs)', style: const TextStyle(fontSize: 14, color: Colors.amberAccent)),
-                                ],
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  // Grid が画面に収まるようにサイズを制御
-                    Expanded(
-                    child: Center(
-                      child: AspectRatio( // Grid全体を正方形に保つ
-                        aspectRatio: 1.0,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            // ★ withValues に修正
-                            color: Colors.blueGrey.shade800.withValues(alpha: 0.5),
-                            borderRadius: BorderRadius.circular(16),
-                            // ★ withValues に修正
-                            border: Border.all(color: Colors.cyan.withValues(alpha: 0.3)),
-                          ),
-                          padding: const EdgeInsets.all(8),
-                          // width/heightの固定指定は削除
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: _targetMemory != null ? _buildIceBreakingGame() : _buildMemoryList(),
+    );
+  }
 
-                          child: GridView.builder(
-                            physics: const NeverScrollableScrollPhysics(),
-                            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount( // const を追加
-                              crossAxisCount: gridCols,
-                              childAspectRatio: 1.0,
-                              mainAxisSpacing: 8,
-                              crossAxisSpacing: 8,
+  Widget _buildMemoryList() {
+    final undiscoveredList = widget.allOtherMemories.where((m) => !m.discovered).toList();
+    if (undiscoveredList.isEmpty) {
+      return const Center(child: Text("発掘できる氷がなくなりました", style: TextStyle(color: Colors.white38)));
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: undiscoveredList.length,
+      itemBuilder: (context, index) => _buildMemoryCard(undiscoveredList[index], index),
+    );
+  }
+
+  Widget _buildIceBreakingGame() {
+    bool isShattering = _shatterController.isAnimating || _clickCount >= _calculatedRequiredClicks;
+    int remaining = isShattering ? 0 : (_calculatedRequiredClicks - _clickCount).clamp(0, 1000);
+    double progress = (_clickCount / _calculatedRequiredClicks).clamp(0.0, 1.0);
+    
+    double photoOpacity = 0.3 + (progress * 0.7); 
+    double iceOpacity = (1.0 - progress).clamp(0.0, 1.0);
+    double blurSigma = iceOpacity * 25.0;
+
+    return Container(
+      width: double.infinity, height: double.infinity,
+      color: Colors.black.withOpacity(0.95),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Text("思い出を掘り起こそう", style: TextStyle(color: Colors.cyan, fontWeight: FontWeight.bold, fontSize: 22, letterSpacing: 4)),
+          // ★ 難易度ラベルを表示
+          const SizedBox(height: 10),
+          Text(_getDifficultyLabel(), style: const TextStyle(color: Colors.white38, fontSize: 12, letterSpacing: 2)),
+          const SizedBox(height: 40),
+          AnimatedBuilder(
+            animation: Listenable.merge([_shakeController, _shatterController]),
+            builder: (context, child) => Transform.translate(
+              offset: Offset(sin(_shakeController.value * pi * 4) * 8, 0),
+              child: child,
+            ),
+            child: GestureDetector(
+              onTap: _handleTap,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Opacity(
+                    opacity: photoOpacity,
+                    child: Container(
+                      width: 300, height: 300,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(24),
+                        image: DecorationImage(image: _getImage(_targetMemory!.photo), fit: BoxFit.cover),
+                      ),
+                    ),
+                  ),
+                  if (!_shatterController.isAnimating)
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(24),
+                      child: Opacity(
+                        opacity: iceOpacity,
+                        child: BackdropFilter(
+                          filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
+                          child: Container(
+                            width: 300, height: 300,
+                            decoration: BoxDecoration(
+                              image: IceEffects.getIceDecoration(_targetIceIndex, opacity: 0.6),
+                              color: Colors.white.withOpacity(0.1),
+                              border: Border.all(color: Colors.white.withOpacity(0.5), width: 2),
                             ),
-                            itemCount: gridSize,
-                            itemBuilder: (_, i) => _cell(i), // ✅ 修正: cszを渡さない
+                            child: CustomPaint(
+                              painter: IceCrackPainter(progress: progress),
+                              child: const Icon(Icons.ac_unit, size: 80, color: Colors.white54),
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: _isDigging || _discovered == null ? null : _reset, 
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.cyan.shade600,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  if (_shatterController.isAnimating)
+                    ..._shards.map((shard) => AnimatedBuilder(
+                      animation: _shatterController,
+                      builder: (context, child) {
+                        double t = _shatterController.value;
+                        return Transform.translate(
+                          offset: Offset(cos(shard.angle) * shard.distance * t, sin(shard.angle) * shard.distance * t + (300 * t * t)),
+                          child: Transform.rotate(angle: t * pi * 3, child: Opacity(opacity: 1.0 - t, child: child)),
+                        );
+                      },
+                      child: Container(
+                        width: shard.size, height: shard.size,
+                        decoration: BoxDecoration(
+                          color: shard.color, borderRadius: BorderRadius.circular(2),
+                          boxShadow: [
+                            if (shard.color != Colors.white.withOpacity(0.9))
+                              BoxShadow(color: shard.color.withOpacity(0.5), blurRadius: 10, spreadRadius: 2)
+                          ]
+                        ),
                       ),
-                      child: const Text('リセットして次を掘る', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                    )),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 40),
+          Text(_shatterController.isAnimating ? "成功！" : '残り: $remaining回', 
+                style: const TextStyle(color: Colors.cyan, fontSize: 24, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 20),
+          TextButton(onPressed: () {
+            _stopBGM();
+            setState(() => _targetMemory = null);
+          }, child: const Text("キャンセル", style: TextStyle(color: Colors.white24))),
+        ],
+      ),
+    );
+  }
+
+ void _onFinishDigging() {
+    final memory = _targetMemory!;
+    // コントローラーをここで定義（既存のまま）
+    final TextEditingController commentController = TextEditingController();
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false, 
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF0D1B3E).withOpacity(0.95),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        // キーボード表示時にダイアログがズレるのを防ぐ
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+        title: const Text("発掘に成功しました！", style: TextStyle(color: Colors.cyan, fontSize: 18)),
+        content: SizedBox(
+          // ダイアログの横幅を固定して安定させる
+          width: MediaQuery.of(context).size.width * 0.8,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IceEffects.memoryDetailContent(memory),
+                const SizedBox(height: 24),
+                const Text("心に触れたら、言葉と光を贈りましょう", 
+                  style: TextStyle(color: Colors.white70, fontSize: 12)),
+                const SizedBox(height: 12),
+                
+                // --- メッセージ入力欄（ここが入力場所） ---
+                TextField(
+                  controller: commentController,
+                  maxLength: 20,
+                  autofocus: false, // 自動でキーボードを出さない（必要ならtrueに）
+                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                  cursorColor: Colors.cyan,
+                  decoration: InputDecoration(
+                    hintText: "一言メッセージ（任意）",
+                    hintStyle: const TextStyle(color: Colors.white24, fontSize: 13),
+                    filled: true,
+                    fillColor: Colors.white.withOpacity(0.08), // 少し明るくして見やすく
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
                     ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Colors.cyan, width: 1),
+                    ),
+                    counterStyle: const TextStyle(color: Colors.cyan, fontSize: 10),
                   ),
                 ],
               ),
             ),
-            
-            // 🚀 UI修正 7: ポップアップをカスタムウィジェットに置き換え
-            if (_discovered != null)
-              Positioned.fill(
-                child: _buildDiscoveryPopup(w),
-              ),
-          ],
-        );
-      })
+          ),
+        ),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 16),
+            child: Column(
+              children: [
+                // 選択肢1: キラキラと想いを贈る
+                ElevatedButton.icon(
+                  onPressed: () async {
+                    _sePlayer.play(AssetSource('sparkle.mp3'));
+                    final commentText = commentController.text.trim();
+                    
+                    Navigator.pop(context);
+                    setState(() {
+                      _targetMemory = null;
+                      _clickCount = 0; 
+                      _shatterController.reset();
+                    });
+
+                    // String? としてコメントを渡し、送信フラグを true に
+                    await widget.onDiscover(
+                      memory, 
+                      commentText.isNotEmpty ? commentText : null, 
+                      true
+                    );
+
+                    _showCelebration(); 
+                  },
+                  icon: const Icon(Icons.auto_awesome),
+                  label: const Text("キラキラと想いを贈る", 
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.cyan, 
+                    foregroundColor: Colors.black, 
+                    minimumSize: const Size(double.infinity, 48),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                // 選択肢2: 送らずに完了
+                TextButton(
+                  onPressed: () async {
+                    Navigator.pop(context);
+                    setState(() {
+                      _targetMemory = null;
+                      _clickCount = 0; 
+                      _shatterController.reset();
+                    });
+
+                    // コメントは送らず false で実行
+                    await widget.onDiscover(memory, null, false);
+                  },
+                  child: const Text("贈らずに自分のコレクションへ", 
+                    style: TextStyle(color: Colors.white38, fontSize: 12)),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
+
+  void _showCelebration() {
+    late OverlayEntry overlayEntry;
+    overlayEntry = OverlayEntry(
+      builder: (context) => SuccessSparkleOverlay(
+        onFinished: () => overlayEntry.remove(),
+      ),
+    );
+    Overlay.of(context).insert(overlayEntry);
+  }
+
+  Widget _buildMemoryCard(Memory memory, int index) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      decoration: IceEffects.glassStyle,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Stack(
+            children: [
+              ClipRRect(
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                child: AspectRatio(aspectRatio: 16 / 9, child: Image(image: _getImage(memory.photo), fit: BoxFit.cover)),
+              ),
+              Positioned.fill(
+                child: ClipRRect(
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                  child: Stack(
+                    children: [
+                      BackdropFilter(filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15), child: Container(color: Colors.transparent)),
+                      Opacity(
+                        opacity: 0.6,
+                        child: Container(decoration: BoxDecoration(image: IceEffects.getIceDecoration(index, opacity: 1.0))),
+                      ),
+                      Center(
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.cyan, foregroundColor: Colors.black, elevation: 8),
+                          onPressed: () {
+                            final diff = _calculateDifficulty(memory.createdAt);
+                            setState(() { 
+                              _targetMemory = memory; 
+                              _clickCount = 0; 
+                              _targetIceIndex = index; 
+                              _calculatedRequiredClicks = diff;
+                            });
+                          },
+                          icon: const Icon(Icons.hardware),
+                          label: const Text("発掘する"),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                  Text(memory.author, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  Text("${memory.digCount} Digs", style: const TextStyle(color: Colors.cyan, fontSize: 11)),
+                ]),
+                const SizedBox(height: 8),
+                Text(memory.text, style: const TextStyle(color: Colors.white70, fontSize: 14), maxLines: 2, overflow: TextOverflow.ellipsis),
+                const SizedBox(height: 12),
+                IceEffects.buildStampCounter("✨", memory.stampsCount),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  ImageProvider _getImage(String path) {
+    if (path.startsWith('http') || kIsWeb) return NetworkImage(path);
+    return FileImage(File(path));
+  }
+}
+
+// -------------------------------------------------------------------------
+// 以下の演出ウィジェットもすべて保持（変更なし）
+// -------------------------------------------------------------------------
+
+class SuccessSparkleOverlay extends StatefulWidget {
+  final VoidCallback onFinished;
+  const SuccessSparkleOverlay({super.key, required this.onFinished});
+
+  @override
+  State<SuccessSparkleOverlay> createState() => _SuccessSparkleOverlayState();
+}
+
+class _SuccessSparkleOverlayState extends State<SuccessSparkleOverlay> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  final List<SparklePoint> _sparkles = List.generate(45, (index) => SparklePoint());
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(vsync: this, duration: const Duration(seconds: 3))..forward();
+    _controller.addStatusListener((status) {
+      if (status == AnimationStatus.completed) widget.onFinished();
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: Stack(
+        children: [
+          AnimatedBuilder(
+            animation: _controller,
+            builder: (context, _) => Container(color: Colors.black.withOpacity((1.0 - _controller.value).clamp(0, 0.7))),
+          ),
+          ..._sparkles.map((s) => AnimatedBuilder(
+            animation: _controller,
+            builder: (context, _) {
+              final t = _controller.value;
+              return Positioned(
+                left: s.x * MediaQuery.of(context).size.width,
+                top: (s.y - (t * s.speed)) * MediaQuery.of(context).size.height,
+                child: Opacity(
+                  opacity: (1.0 - t).clamp(0, 1),
+                  child: Icon(Icons.auto_awesome, color: s.color, size: s.size),
+                ),
+              );
+            },
+          )),
+          Center(
+            child: FadeTransition(
+              opacity: CurvedAnimation(parent: _controller, curve: const Interval(0.0, 0.2, curve: Curves.easeIn)),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                decoration: BoxDecoration(
+                  color: Colors.cyan.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(40),
+                  border: Border.all(color: Colors.cyanAccent.withOpacity(0.5), width: 2),
+                ),
+                child: const Text("想いを届けました ✨",
+                    style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold, decoration: TextDecoration.none)),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class IceShard {
+  final double angle, distance, size;
+  final Color color; // レア破片用の色
+  IceShard({required this.angle, required this.distance, required this.size, required this.color});
+}
+
+class IceCrackPainter extends CustomPainter {
+  final double progress;
+  IceCrackPainter({required this.progress});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (progress < 0.1) return;
+    final paint = Paint()..color = Colors.white.withOpacity(0.8)..strokeWidth = 1.5..style = PaintingStyle.stroke..strokeCap = StrokeCap.round;
+    final glowPaint = Paint()..color = Colors.white.withOpacity(0.2)..strokeWidth = 4.0..style = PaintingStyle.stroke..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2);
+    final random = Random(42); 
+    final centerX = size.width / 2;
+    final centerY = size.height / 2;
+    int mainCracks = (progress * 15).toInt().clamp(3, 15);
+    for (int i = 0; i < mainCracks; i++) {
+      final path = Path();
+      path.moveTo(centerX, centerY);
+      double currentX = centerX;
+      double currentY = centerY;
+      double angle = (i * (2 * pi / mainCracks)) + (random.nextDouble() * 0.5);
+      double maxLength = (size.width / 1.5) * progress;
+      int segments = 5;
+      for (int j = 0; j < segments; j++) {
+        double step = (maxLength / segments);
+        currentX += cos(angle) * step + (random.nextDouble() - 0.5) * 20;
+        currentY += sin(angle) * step + (random.nextDouble() - 0.5) * 20;
+        path.lineTo(currentX, currentY);
+        if (progress > 0.4 && random.nextDouble() > 0.6) {
+          _drawBranch(canvas, paint, currentX, currentY, angle + 0.8, progress * 30, random);
+        }
+      }
+      canvas.drawPath(path, glowPaint);
+      canvas.drawPath(path, paint);
+    }
+  }
+
+  void _drawBranch(Canvas canvas, Paint paint, double x, double y, double angle, double length, Random random) {
+    final branchPath = Path();
+    branchPath.moveTo(x, y);
+    branchPath.lineTo(x + cos(angle) * length, y + sin(angle) * length);
+    canvas.drawPath(branchPath, paint);
+  }
+
+  @override
+  bool shouldRepaint(IceCrackPainter oldDelegate) => oldDelegate.progress != progress;
 }

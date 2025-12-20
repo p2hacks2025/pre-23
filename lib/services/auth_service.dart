@@ -1,103 +1,102 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/foundation.dart';
 import '../models/user_profile.dart';
 
 class AuthService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   
-  // シングルトン化（アプリ内で1つのインスタンスを共有）
-  static final AuthService _instance = AuthService._internal();
-  factory AuthService() => _instance;
-  AuthService._internal();
+  static const String _userProfilesCollection = 'userProfiles';
 
-  // 現在のユーザーを保持
-  UserProfile? _currentUser;
+  // ★追加: ログイン状態の変化をリアルタイムで流す (機能を減らさず追加)
+  // これにより、ログイン・ログアウトした瞬間に他の画面がそれを検知できます
+  Stream<UserProfile?> authStateChanges() {
+    return _auth.authStateChanges().asyncMap((user) async {
+      if (user == null) return null;
+      // ユーザーが切り替わったらFirestoreから最新のプロフィールを取得
+      return await _fetchProfileFromFirestore(user.uid);
+    });
+  }
 
-  // ゲストユーザー定義
-  final UserProfile _guestUser = UserProfile(
-    id: 'guest',
-    username: 'Guest',
-    avatar: '',
-    bio: '旅の途中',
-  );
-
-  // 現在のユーザーを取得（未ログインならゲストを返す）
+  // 1. 現在のユーザー取得 (既存)
   Future<UserProfile> getCurrentUser() async {
-    if (_currentUser != null) return _currentUser!;
-    // ★本来はここでSharedPreferenceなどを確認して自動ログイン処理を入れる
-    return _guestUser; 
-  }
-
-  bool get isGuest => _currentUser?.id == 'guest' || _currentUser == null;
-
-  // サインイン（ユーザー名 + パスコード）
-  Future<bool> signIn(String username, String passcode) async {
-    try {
-      final querySnapshot = await _firestore
-          .collection('users')
-          .where('username', isEqualTo: username)
-          .where('passcode', isEqualTo: passcode) // ★本番ではハッシュ化推奨
-          .limit(1)
-          .get();
-
-      if (querySnapshot.docs.isNotEmpty) {
-        final doc = querySnapshot.docs.first;
-        final data = doc.data();
-        _currentUser = UserProfile(
-          id: doc.id,
-          username: data['username'] ?? '',
-          avatar: data['avatar'] ?? '',
-          bio: data['bio'] ?? '',
-        );
-        return true; // 成功
-      } else {
-        return false; // ユーザーが見つからないかパスワード違い
-      }
-    } catch (e) {
-      debugPrint('SignIn Error: $e');
-      return false;
+    final user = _auth.currentUser;
+    if (user == null) {
+      return _createGuestProfile(); 
     }
+    return await _fetchProfileFromFirestore(user.uid);
   }
 
-  // 新規登録
-  Future<bool> signUp(String username, String passcode) async {
-    try {
-      // 重複チェック
-      final check = await _firestore
-          .collection('users')
-          .where('username', isEqualTo: username)
-          .get();
-      
-      if (check.docs.isNotEmpty) {
-        return false; // 既に存在するユーザー名
-      }
-
-      // ユーザー作成
-      final docRef = _firestore.collection('users').doc(); // 自動ID
-      await docRef.set({
-        'username': username,
-        'passcode': passcode,
-        'avatar': '',
-        'bio': '',
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-
-      // そのままログイン状態にする
-      _currentUser = UserProfile(
-        id: docRef.id,
-        username: username,
-        avatar: '',
-        bio: '',
-      );
-      return true;
-    } catch (e) {
-      debugPrint('SignUp Error: $e');
-      return false;
-    }
+  // 2. メールとパスワードでログイン (既存)
+  Future<UserProfile> signInWithEmail(String email, String password) async {
+    final credential = await _auth.signInWithEmailAndPassword(
+      email: email, 
+      password: password
+    );
+    return await _fetchProfileFromFirestore(credential.user!.uid);
   }
 
-  // ログアウト
+  // 3. 新規登録 (既存)
+  Future<UserProfile> signUpWithEmail({
+    required String email, 
+    required String password, 
+    required String username
+  }) async {
+    final credential = await _auth.createUserWithEmailAndPassword(
+      email: email, 
+      password: password
+    );
+    
+    return await _createOrUpdateProfile(
+      credential.user!.uid, 
+      username,
+      bio: '凍土に降り立った新たな探索者'
+    );
+  }
+
+  // 4. サインアウト (既存)
   Future<void> signOut() async {
-    _currentUser = null;
+    await _auth.signOut();
+  }
+
+  // 5. パスワード変更 (既存)
+  Future<void> updatePassword(String newPassword) async {
+    final user = _auth.currentUser;
+    if (user != null) {
+      await user.updatePassword(newPassword);
+    } else {
+      throw Exception('ユーザーがログインしていません');
+    }
+  }
+
+  // --- 内部ヘルパーメソッド (既存) ---
+
+  Future<UserProfile> _fetchProfileFromFirestore(String uid) async {
+    final doc = await _db.collection(_userProfilesCollection).doc(uid).get();
+    if (doc.exists) {
+      return UserProfile.fromJson(doc.data()!);
+    }
+    return await _createOrUpdateProfile(uid, 'ユーザー');
+  }
+  
+  Future<UserProfile> _createOrUpdateProfile(String uid, String username, {String? avatar, String? bio}) async {
+    final profileData = {
+      'id': uid,
+      'username': username,
+      'avatar': avatar ?? 'https://api.dicebear.com/7.x/avataaars/png?seed=$uid',
+      'bio': bio ?? '',
+    };
+    
+    await _db.collection(_userProfilesCollection).doc(uid).set(profileData, SetOptions(merge: true));
+    
+    return UserProfile(
+      id: uid, 
+      username: username, 
+      avatar: profileData['avatar']!, 
+      bio: profileData['bio']!
+    );
+  }
+
+  UserProfile _createGuestProfile() {
+    return UserProfile(id: 'guest', username: 'ゲスト', avatar: '', bio: '');
   }
 }
